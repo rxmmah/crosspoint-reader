@@ -19,8 +19,11 @@ class DictionarySelectActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
-  // Discovered dictionary folder names (not including "None" sentinel).
+  // Discovered dictionary folder names and file stems (parallel vectors, excluding "None").
+  // e.g. dictFolders[i] = "dict-en-en", dictStems[i] = "dict-data"
+  // folderForIndex() combines them into the full base path used for file access.
   std::vector<std::string> dictFolders;
+  std::vector<std::string> dictStems;
 
   // Index into the full list including "None" at position 0.
   int selectedIndex = 0;

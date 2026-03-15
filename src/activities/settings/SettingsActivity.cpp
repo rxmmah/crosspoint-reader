@@ -53,6 +53,20 @@ void SettingsActivity::onEnter() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  {
+    auto dictSetting = SettingInfo::Action(StrId::STR_DICTIONARY, SettingAction::Dictionary);
+    dictSetting.stringGetter = [] {
+      const char* path = SETTINGS.dictionaryPath;
+      if (path[0] == '\0') return std::string(tr(STR_DICT_NONE));
+      // Path format: /dictionary/<folder>/<stem> — display the folder name.
+      const char* lastSlash = strrchr(path, '/');
+      if (lastSlash == nullptr || lastSlash == path) return std::string(path);
+      const std::string prefix(path, static_cast<size_t>(lastSlash - path));
+      const char* prevSlash = strrchr(prefix.c_str(), '/');
+      return std::string(prevSlash ? prevSlash + 1 : prefix.c_str());
+    };
+    readerSettings.push_back(std::move(dictSetting));
+  }
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
   // Reset selection to first category

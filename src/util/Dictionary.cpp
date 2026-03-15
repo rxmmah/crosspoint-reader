@@ -19,8 +19,10 @@ bool Dictionary::indexLoaded = false;
 // Path helpers
 // ---------------------------------------------------------------------------
 
-void Dictionary::buildPath(char* buf, size_t len, const char* filename) {
-  snprintf(buf, len, "%s/%s", activeFolderPath, filename);
+void Dictionary::buildPath(char* buf, size_t len, const char* ext) {
+  // activeFolderPath is the full base path (e.g. /dictionary/dict-en-en/dict-data).
+  // Callers pass just the extension (e.g. "idx"), giving /dictionary/.../dict-data.idx.
+  snprintf(buf, len, "%s.%s", activeFolderPath, ext);
 }
 
 // ---------------------------------------------------------------------------
@@ -50,8 +52,8 @@ bool Dictionary::exists() {
   if (activeFolderPath[0] == '\0') return false;
   char idxPath[520];
   char dictPath[520];
-  buildPath(idxPath, sizeof(idxPath), "dict-data.idx");
-  buildPath(dictPath, sizeof(dictPath), "dict-data.dict");
+  buildPath(idxPath, sizeof(idxPath), "idx");
+  buildPath(dictPath, sizeof(dictPath), "dict");
   return Storage.exists(idxPath) && Storage.exists(dictPath);
 }
 
@@ -61,9 +63,9 @@ bool Dictionary::isValidDictionary() {
   char ifoPath[520];
   char idxPath[520];
   char dictPath[520];
-  snprintf(ifoPath, sizeof(ifoPath), "%s/dict-data.ifo", folderPath);
-  snprintf(idxPath, sizeof(idxPath), "%s/dict-data.idx", folderPath);
-  snprintf(dictPath, sizeof(dictPath), "%s/dict-data.dict", folderPath);
+  snprintf(ifoPath, sizeof(ifoPath), "%s.ifo", folderPath);
+  snprintf(idxPath, sizeof(idxPath), "%s.idx", folderPath);
+  snprintf(dictPath, sizeof(dictPath), "%s.dict", folderPath);
   const bool valid = Storage.exists(ifoPath) && Storage.exists(idxPath) && Storage.exists(dictPath);
   if (!valid) {
     LOG_DBG("DICT", "Stored dictionary path no longer valid, resetting");
@@ -83,7 +85,7 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
   if (folderPath == nullptr || folderPath[0] == '\0') return info;
 
   char ifoPath[520];
-  snprintf(ifoPath, sizeof(ifoPath), "%s/dict-data.ifo", folderPath);
+  snprintf(ifoPath, sizeof(ifoPath), "%s.ifo", folderPath);
 
   FsFile file;
   if (!Storage.openFileForRead("DICT", ifoPath, file)) return info;
@@ -150,8 +152,8 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
   // Check for compressed .dict.dz (but no .dict)
   char dictPath[520];
   char dictDzPath[520];
-  snprintf(dictPath, sizeof(dictPath), "%s/dict-data.dict", folderPath);
-  snprintf(dictDzPath, sizeof(dictDzPath), "%s/dict-data.dict.dz", folderPath);
+  snprintf(dictPath, sizeof(dictPath), "%s.dict", folderPath);
+  snprintf(dictDzPath, sizeof(dictDzPath), "%s.dict.dz", folderPath);
   info.isCompressed = !Storage.exists(dictPath) && Storage.exists(dictDzPath);
 
   info.valid = true;
@@ -190,7 +192,7 @@ std::string Dictionary::cleanWord(const std::string& word) {
 bool Dictionary::loadIndex(const std::function<void(int percent)>& onProgress,
                            const std::function<bool()>& shouldCancel) {
   char idxPath[520];
-  buildPath(idxPath, sizeof(idxPath), "dict-data.idx");
+  buildPath(idxPath, sizeof(idxPath), "idx");
 
   FsFile idx;
   if (!Storage.openFileForRead("DICT", idxPath, idx)) return false;
@@ -267,7 +269,7 @@ std::string Dictionary::readDefinition(uint32_t offset, uint32_t size) {
   if (!exists()) return "";
 
   char dictPath[520];
-  buildPath(dictPath, sizeof(dictPath), "dict-data.dict");
+  buildPath(dictPath, sizeof(dictPath), "dict");
 
   FsFile dict;
   if (!Storage.openFileForRead("DICT", dictPath, dict)) return "";
@@ -299,7 +301,7 @@ std::string Dictionary::lookup(const std::string& word,
   if (sparseOffsets.empty()) return "";
 
   char idxPath[520];
-  buildPath(idxPath, sizeof(idxPath), "dict-data.idx");
+  buildPath(idxPath, sizeof(idxPath), "idx");
 
   FsFile idx;
   if (!Storage.openFileForRead("DICT", idxPath, idx)) return "";
@@ -576,7 +578,7 @@ std::vector<std::string> Dictionary::findSimilar(const std::string& word, int ma
   if (!indexLoaded || sparseOffsets.empty()) return {};
 
   char idxPath[520];
-  buildPath(idxPath, sizeof(idxPath), "dict-data.idx");
+  buildPath(idxPath, sizeof(idxPath), "idx");
 
   FsFile idx;
   if (!Storage.openFileForRead("DICT", idxPath, idx)) return {};

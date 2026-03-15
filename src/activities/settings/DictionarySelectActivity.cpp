@@ -6,8 +6,10 @@
 #include <Logging.h>
 
 #include <cstring>
+#include <memory>
 
 #include "CrossPointSettings.h"
+#include "DictDecompressActivity.h"
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -37,11 +39,9 @@ void DictionarySelectActivity::onEnter() {
   selectedIndex = 0;  // default: None
   const char* activePath = SETTINGS.dictionaryPath;
   if (activePath[0] != '\0') {
-    // activePath is a full path like /dictionary/dict-en-en; extract folder name.
-    const char* lastSlash = strrchr(activePath, '/');
-    const char* folderName = (lastSlash != nullptr) ? lastSlash + 1 : activePath;
+    // activePath is a full base path like /dictionary/dict-en-en/dict-data.
     for (int i = 0; i < static_cast<int>(dictFolders.size()); i++) {
-      if (dictFolders[i] == folderName) {
+      if (folderForIndex(i + 1) == activePath) {
         selectedIndex = i + 1;  // +1 because index 0 is "None"
         break;
       }
@@ -62,6 +62,7 @@ void DictionarySelectActivity::onExit() { Activity::onExit(); }
 
 void DictionarySelectActivity::scanDictionaries() {
   dictFolders.clear();
+  dictStems.clear();
 
   auto root = Storage.open(DICT_ROOT);
   if (!root || !root.isDirectory()) {
@@ -81,16 +82,46 @@ void DictionarySelectActivity::scanDictionaries() {
       continue;
     }
 
-    // Check for a valid .ifo file inside this subdirectory
-    char ifoPath[520];
-    snprintf(ifoPath, sizeof(ifoPath), "%s/%s/dict-data.ifo", DICT_ROOT, name);
+    // Scan the subdirectory for any .ifo file — use the first one found.
+    char subPath[520];
+    snprintf(subPath, sizeof(subPath), "%s/%s", DICT_ROOT, name);
+    entry.close();
 
-    if (Storage.exists(ifoPath)) {
-      dictFolders.push_back(std::string(name));
-      LOG_DBG("DSEL", "Found dictionary: %s", name);
+    auto subDir = Storage.open(subPath);
+    if (!subDir || !subDir.isDirectory()) {
+      if (subDir) subDir.close();
+      continue;
     }
 
-    entry.close();
+    subDir.rewindDirectory();
+    char subName[500];
+    char foundStem[500] = "";
+    bool multipleIfo = false;
+    for (auto subEntry = subDir.openNextFile(); subEntry; subEntry = subDir.openNextFile()) {
+      subEntry.getName(subName, sizeof(subName));
+      const size_t subLen = strlen(subName);
+      const bool isIfo = !subEntry.isDirectory() && subLen > 4 &&
+                         strcmp(subName + subLen - 4, ".ifo") == 0;
+      subEntry.close();
+
+      if (isIfo) {
+        if (foundStem[0] != '\0') {
+          // Second .ifo found — folder is invalid.
+          multipleIfo = true;
+          LOG_DBG("DSEL", "Skipping %s: multiple .ifo files found", name);
+          break;
+        }
+        subName[subLen - 4] = '\0';  // strip ".ifo" to get stem
+        strncpy(foundStem, subName, sizeof(foundStem) - 1);
+      }
+    }
+    subDir.close();
+
+    if (!multipleIfo && foundStem[0] != '\0') {
+      dictFolders.push_back(std::string(name));
+      dictStems.push_back(std::string(foundStem));
+      LOG_DBG("DSEL", "Found dictionary: %s/%s", name, foundStem);
+    }
   }
 
   root.close();
@@ -102,8 +133,11 @@ void DictionarySelectActivity::scanDictionaries() {
 
 std::string DictionarySelectActivity::folderForIndex(int index) const {
   if (index <= 0 || index > static_cast<int>(dictFolders.size())) return "";
+  // Returns the full base path: /dictionary/<folder>/<stem>
+  // All file access appends an extension to this (e.g. basePath + ".idx").
   char fullPath[520];
-  snprintf(fullPath, sizeof(fullPath), "%s/%s", DICT_ROOT, dictFolders[index - 1].c_str());
+  snprintf(fullPath, sizeof(fullPath), "%s/%s/%s", DICT_ROOT, dictFolders[index - 1].c_str(),
+           dictStems[index - 1].c_str());
   return std::string(fullPath);
 }
 
@@ -151,13 +185,39 @@ void DictionarySelectActivity::loop() {
     return;
   }
 
-  // Short press Confirm: apply selection and exit.
+  // Short press Confirm: apply selection (or decompress if compressed) and exit.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) &&
       mappedInput.getHeldTime() < VIEW_INFO_MS) {
     if (ignoreNextConfirmRelease) {
       ignoreNextConfirmRelease = false;
       return;
     }
+
+    // For a real dictionary entry, check whether the .dict file is missing but
+    // a .dict.dz exists — i.e. the dictionary is compressed and needs extraction.
+    if (selectedIndex > 0) {
+      std::string folder = folderForIndex(selectedIndex);
+      char dictPath[520];
+      char dzPath[520];
+      snprintf(dictPath, sizeof(dictPath), "%s.dict", folder.c_str());
+      snprintf(dzPath, sizeof(dzPath), "%s.dict.dz", folder.c_str());
+
+      if (!Storage.exists(dictPath) && Storage.exists(dzPath)) {
+        // Compressed dictionary — launch decompressor instead of applying directly.
+        startActivityForResult(
+            std::make_unique<DictDecompressActivity>(renderer, mappedInput, folder),
+            [this](const ActivityResult& result) {
+              if (!result.isCancelled) {
+                // Extraction succeeded — .dict now exists; apply the selection.
+                applySelection();
+                finish();
+              }
+              // Cancelled/failed: stay in picker with the same highlighted index.
+            });
+        return;
+      }
+    }
+
     applySelection();
     finish();
     return;
