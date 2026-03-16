@@ -10,8 +10,11 @@
 #include <Logging.h>
 #include <esp_system.h>
 
+#include <algorithm>
+
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DictionaryWordSelectActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
@@ -23,6 +26,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/Dictionary.h"
 #include "util/ScreenshotUtil.h"
 
 namespace {
@@ -147,7 +151,7 @@ void EpubReaderActivity::loop() {
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
     startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                                renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                               SETTINGS.orientation, !currentPageFootnotes.empty()),
+                               SETTINGS.orientation, !currentPageFootnotes.empty(), Dictionary::exists()),
                            [this](const ActivityResult& result) {
                              // Always apply orientation change even if the menu was cancelled
                              const auto& menu = std::get<MenuResult>(result.data);
@@ -399,6 +403,42 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               }
             });
       }
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::LOOKUP: {
+      auto pageForLookup = section ? section->loadPageFromSectionFile() : nullptr;
+      if (!pageForLookup) {
+        requestUpdate();
+        break;
+      }
+      int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
+      renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
+                                       &orientedMarginLeft);
+      orientedMarginTop += SETTINGS.screenMargin;
+      orientedMarginLeft += SETTINGS.screenMargin;
+      std::string nextPageFirstWord;
+      if (section && section->currentPage < section->pageCount - 1) {
+        int savedPage = section->currentPage;
+        section->currentPage = savedPage + 1;
+        auto nextPage = section->loadPageFromSectionFile();
+        section->currentPage = savedPage;
+        if (nextPage && !nextPage->elements.empty()) {
+          const auto it = std::find_if(nextPage->elements.begin(), nextPage->elements.end(),
+                                       [](const auto& el) { return el->getTag() == TAG_PageLine; });
+          if (it != nextPage->elements.end()) {
+            const auto* firstLine = static_cast<const PageLine*>(it->get());
+            if (firstLine->getBlock() && !firstLine->getBlock()->getWords().empty()) {
+              nextPageFirstWord = firstLine->getBlock()->getWords().front();
+            }
+          }
+        }
+      }
+      const int readerFontId = SETTINGS.getReaderFontId();
+      const std::string bookCachePath = epub->getCachePath();
+      startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
+                                 renderer, mappedInput, std::move(pageForLookup), readerFontId, orientedMarginLeft,
+                                 orientedMarginTop, bookCachePath, nextPageFirstWord),
+                             [this](const ActivityResult&) { requestUpdate(); });
       break;
     }
   }
