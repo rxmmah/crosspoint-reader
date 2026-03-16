@@ -20,7 +20,7 @@
 class DictPrepareActivity final : public Activity {
  public:
   explicit DictPrepareActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string folderPath)
-      : Activity("DictPrepare", renderer, mappedInput), folderPath(std::move(folderPath)) {}
+      : Activity("DictPrepare", renderer, mappedInput), folderPath(std::move(folderPath)), steps{} {}
 
   void onEnter() override;
   void onExit() override;
