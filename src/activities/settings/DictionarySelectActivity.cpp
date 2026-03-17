@@ -5,6 +5,7 @@
 #include <I18n.h>
 #include <Logging.h>
 
+#include <algorithm>
 #include <cstring>
 #include <memory>
 
@@ -106,7 +107,8 @@ void DictionarySelectActivity::scanDictionaries() {
       continue;
     }
 
-    // Scan the subdirectory for any .ifo file — use the first one found.
+    // Scan the subdirectory for any .idx file — use the first one found.
+    // .ifo is not required; discovery is keyed on .idx presence only.
     char subPath[520];
     snprintf(subPath, sizeof(subPath), "%s/%s", DICT_ROOT, name);
     entry.close();
@@ -120,27 +122,27 @@ void DictionarySelectActivity::scanDictionaries() {
     subDir.rewindDirectory();
     char subName[256];  // bare filename, not full path — 256 is sufficient for FAT32
     char foundStem[256] = "";
-    bool multipleIfo = false;
+    bool multipleIdx = false;
     for (auto subEntry = subDir.openNextFile(); subEntry; subEntry = subDir.openNextFile()) {
       subEntry.getName(subName, sizeof(subName));
       const size_t subLen = strlen(subName);
-      const bool isIfo = !subEntry.isDirectory() && subLen > 4 && strcmp(subName + subLen - 4, ".ifo") == 0;
+      const bool isIdx = !subEntry.isDirectory() && subLen > 4 && strcmp(subName + subLen - 4, ".idx") == 0;
       subEntry.close();
 
-      if (isIfo) {
+      if (isIdx) {
         if (foundStem[0] != '\0') {
-          // Second .ifo found — folder is invalid.
-          multipleIfo = true;
-          LOG_DBG("DSEL", "Skipping %s: multiple .ifo files found", name);
+          // Second .idx found — folder is ambiguous, skip it.
+          multipleIdx = true;
+          LOG_DBG("DSEL", "Skipping %s: multiple .idx files found", name);
           break;
         }
-        subName[subLen - 4] = '\0';  // strip ".ifo" to get stem
+        subName[subLen - 4] = '\0';  // strip ".idx" to get stem
         strncpy(foundStem, subName, sizeof(foundStem) - 1);
       }
     }
     subDir.close();
 
-    if (!multipleIfo && foundStem[0] != '\0') {
+    if (!multipleIdx && foundStem[0] != '\0') {
       dictFolders.push_back(std::string(name));
       dictStems.push_back(std::string(foundStem));
       LOG_DBG("DSEL", "Found dictionary: %s/%s", name, foundStem);
@@ -148,6 +150,36 @@ void DictionarySelectActivity::scanDictionaries() {
   }
 
   root.close();
+
+  // Sort alphabetically by folder name (parallel vectors — sort together via paired sort).
+  if (dictFolders.size() > 1) {
+    // Build index array, sort by folder name, then reorder both vectors.
+    std::vector<std::pair<std::string, std::string>> pairs;
+    pairs.reserve(dictFolders.size());
+    for (size_t i = 0; i < dictFolders.size(); i++) {
+      pairs.push_back({std::move(dictFolders[i]), std::move(dictStems[i])});
+    }
+    std::sort(pairs.begin(), pairs.end(),
+              [](const std::pair<std::string, std::string>& a, const std::pair<std::string, std::string>& b) {
+                // Case-insensitive sort — matches FileBrowserActivity::sortFileList() behaviour.
+                const char* s1 = a.first.c_str();
+                const char* s2 = b.first.c_str();
+                while (*s1 && *s2) {
+                  char c1 = static_cast<char>(tolower(static_cast<unsigned char>(*s1)));
+                  char c2 = static_cast<char>(tolower(static_cast<unsigned char>(*s2)));
+                  if (c1 != c2) return c1 < c2;
+                  s1++;
+                  s2++;
+                }
+                return *s1 == '\0' && *s2 != '\0';
+              });
+    dictFolders.clear();
+    dictStems.clear();
+    for (auto& p : pairs) {
+      dictFolders.push_back(std::move(p.first));
+      dictStems.push_back(std::move(p.second));
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -200,11 +232,21 @@ void DictionarySelectActivity::applySelection() {
 
 void DictionarySelectActivity::loop() {
   if (showingInfo) {
-    // Any button dismisses the info screen
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
-        mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      showingInfo = false;
-      requestUpdate();
+    if (showingRaw) {
+      // Raw view: Back returns to parsed metadata view.
+      if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+        showingRaw = false;
+        requestUpdate();
+      }
+    } else {
+      // Parsed metadata view: Back exits to picker; Confirm switches to raw view.
+      if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+        showingInfo = false;
+        requestUpdate();
+      } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+        showingRaw = true;
+        requestUpdate();
+      }
     }
     return;
   }
@@ -219,7 +261,22 @@ void DictionarySelectActivity::loop() {
       selectedIndex > 0) {
     std::string folder = folderForIndex(selectedIndex);
     currentInfo = Dictionary::readInfo(folder.c_str());
+    // Pre-load raw .ifo content for the "View Raw" action within the metadata screen.
+    rawIfoContent = "";
+    char ifoPath[520];
+    snprintf(ifoPath, sizeof(ifoPath), "%s.ifo", folder.c_str());
+    FsFile ifoFile;
+    if (Storage.openFileForRead("DSEL", ifoPath, ifoFile)) {
+      char buf[512];
+      int n = ifoFile.read(buf, sizeof(buf) - 1);
+      ifoFile.close();
+      if (n > 0) {
+        buf[n] = '\0';
+        rawIfoContent = std::string(buf);
+      }
+    }
     showingInfo = true;
+    showingRaw = false;
     requestUpdate();
     return;
   }
@@ -279,6 +336,8 @@ void DictionarySelectActivity::loop() {
     return;
   }
 
+  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
+
   buttonNavigator.onNextRelease([this] {
     selectedIndex = ButtonNavigator::nextIndex(selectedIndex, totalItems);
     requestUpdate();
@@ -286,6 +345,16 @@ void DictionarySelectActivity::loop() {
 
   buttonNavigator.onPreviousRelease([this] {
     selectedIndex = ButtonNavigator::previousIndex(selectedIndex, totalItems);
+    requestUpdate();
+  });
+
+  buttonNavigator.onNextContinuous([this, pageItems] {
+    selectedIndex = ButtonNavigator::nextPageIndex(selectedIndex, totalItems, pageItems);
+    requestUpdate();
+  });
+
+  buttonNavigator.onPreviousContinuous([this, pageItems] {
+    selectedIndex = ButtonNavigator::previousPageIndex(selectedIndex, totalItems, pageItems);
     requestUpdate();
   });
 }
@@ -302,74 +371,120 @@ void DictionarySelectActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   if (showingInfo) {
-    // --- Info screen: display raw .ifo fields ---
     GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_DICT_INFO));
 
     const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
     int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
     const int x = metrics.contentSidePadding;
     const int maxWidth = pageWidth - metrics.contentSidePadding * 2;
+    const int maxY = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
-    auto drawLine = [&](const char* label, const char* value) {
-      if (value == nullptr || value[0] == '\0') return;
-      char buf[320];
-      snprintf(buf, sizeof(buf), "%s: %s", label, value);
-      std::string line = renderer.truncatedText(UI_10_FONT_ID, buf, maxWidth);
-      renderer.drawText(UI_10_FONT_ID, x, y, line.c_str());
-      y += lineHeight;
-    };
+    if (showingRaw) {
+      // --- Raw view: verbatim .ifo file text, character-wrapped per line ---
+      if (rawIfoContent.empty()) {
+        renderer.drawText(UI_10_FONT_ID, x, y, tr(STR_DICT_NO_METADATA));
+      } else {
+        // Single segBuf reused for both measurement and drawing.
+        char segBuf[256];
+        const char* lineStart = rawIfoContent.c_str();
+        while (*lineStart && y + lineHeight <= maxY) {
+          const char* lineEnd = lineStart;
+          while (*lineEnd && *lineEnd != '\n') lineEnd++;
+          size_t lineLen = static_cast<size_t>(lineEnd - lineStart);
+          if (lineLen > 0 && lineStart[lineLen - 1] == '\r') lineLen--;
 
-    // Character-level line breaking for values with no spaces (e.g. URLs).
-    // Matches the pattern used in KeyboardEntryActivity for long input text.
-    // Truncates only the final line if the cap is reached.
-    auto drawCharWrapped = [&](const char* label, const char* value, int maxLines) {
-      if (value == nullptr || value[0] == '\0') return;
-      char buf[320];
-      snprintf(buf, sizeof(buf), "%s: %s", label, value);
-      const std::string text(buf);
-      int startIdx = 0;
-      int linesDrawn = 0;
-      while (startIdx < static_cast<int>(text.size()) && linesDrawn < maxLines) {
-        if (linesDrawn == maxLines - 1) {
-          // Last allowed line: truncate remainder with ellipsis.
-          std::string remaining = text.substr(startIdx);
-          std::string truncated = renderer.truncatedText(UI_10_FONT_ID, remaining.c_str(), maxWidth);
-          renderer.drawText(UI_10_FONT_ID, x, y, truncated.c_str());
-          y += lineHeight;
-          break;
+          size_t pos = 0;
+          while (pos < lineLen && y + lineHeight <= maxY) {
+            size_t endPos = lineLen;
+            while (endPos > pos) {
+              size_t segLen = endPos - pos < sizeof(segBuf) - 1 ? endPos - pos : sizeof(segBuf) - 1;
+              memcpy(segBuf, lineStart + pos, segLen);
+              segBuf[segLen] = '\0';
+              if (renderer.getTextWidth(UI_10_FONT_ID, segBuf) <= maxWidth) break;
+              endPos--;
+            }
+            if (endPos == pos) endPos = pos + 1;
+            size_t segLen = endPos - pos < sizeof(segBuf) - 1 ? endPos - pos : sizeof(segBuf) - 1;
+            memcpy(segBuf, lineStart + pos, segLen);
+            segBuf[segLen] = '\0';
+            renderer.drawText(UI_10_FONT_ID, x, y, segBuf);
+            y += lineHeight;
+            pos = endPos;
+          }
+
+          if (*lineEnd == '\0') break;
+          lineStart = lineEnd + 1;
         }
-        // Find the longest prefix of the remaining text that fits on one line.
-        int endIdx = static_cast<int>(text.size());
-        while (endIdx > startIdx) {
-          std::string segment = text.substr(startIdx, endIdx - startIdx);
-          if (renderer.getTextWidth(UI_10_FONT_ID, segment.c_str()) <= maxWidth) break;
-          endIdx--;
-        }
-        renderer.drawText(UI_10_FONT_ID, x, y, text.substr(startIdx, endIdx - startIdx).c_str());
-        y += lineHeight;
-        linesDrawn++;
-        startIdx = endIdx;
       }
-    };
 
-    char wordcountBuf[24];
-    char synBuf[24];
-    snprintf(wordcountBuf, sizeof(wordcountBuf), "%lu", static_cast<unsigned long>(currentInfo.wordcount));
-    snprintf(synBuf, sizeof(synBuf), "%lu", static_cast<unsigned long>(currentInfo.synwordcount));
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    } else {
+      // --- Parsed metadata view ---
+      // Short fixed-length fields use single-line truncation; long fields (name, description,
+      // website, status) use character-level wrapping so no content is silently cut off (F-001).
+      auto drawLine = [&](const char* label, const char* value) {
+        if (value == nullptr || value[0] == '\0') return;
+        char buf[128];
+        snprintf(buf, sizeof(buf), "%s: %s", label, value);
+        std::string line = renderer.truncatedText(UI_10_FONT_ID, buf, maxWidth);
+        renderer.drawText(UI_10_FONT_ID, x, y, line.c_str());
+        y += lineHeight;
+      };
 
-    drawLine("Name", currentInfo.bookname);
-    drawLine("Words", wordcountBuf);
-    if (currentInfo.hasSyn) drawLine("Synonyms", synBuf);
-    drawLine("Date", currentInfo.date);
-    drawCharWrapped("Website", currentInfo.website, 5);
-    drawLine("Description", currentInfo.description);
-    drawLine("Type", currentInfo.sametypesequence);
-    if (currentInfo.isCompressed) {
-      drawLine("Status", "Compressed (.dict.dz) — extract before use");
+      // Character-level wrapping for values that may exceed one line (URLs, descriptions, etc.).
+      auto drawWrapped = [&](const char* label, const char* value) {
+        if (value == nullptr || value[0] == '\0') return;
+        char buf[384];
+        snprintf(buf, sizeof(buf), "%s: %s", label, value);
+        const char* text = buf;
+        size_t totalLen = strlen(text);
+        char segBuf[256];
+        size_t pos = 0;
+        while (pos < totalLen && y + lineHeight <= maxY) {
+          size_t endPos = totalLen;
+          while (endPos > pos) {
+            size_t segLen = endPos - pos < sizeof(segBuf) - 1 ? endPos - pos : sizeof(segBuf) - 1;
+            memcpy(segBuf, text + pos, segLen);
+            segBuf[segLen] = '\0';
+            if (renderer.getTextWidth(UI_10_FONT_ID, segBuf) <= maxWidth) break;
+            endPos--;
+          }
+          if (endPos == pos) endPos = pos + 1;
+          size_t segLen = endPos - pos < sizeof(segBuf) - 1 ? endPos - pos : sizeof(segBuf) - 1;
+          memcpy(segBuf, text + pos, segLen);
+          segBuf[segLen] = '\0';
+          renderer.drawText(UI_10_FONT_ID, x, y, segBuf);
+          y += lineHeight;
+          pos = endPos;
+        }
+      };
+
+      char wordcountBuf[24];
+      char synBuf[24];
+      snprintf(wordcountBuf, sizeof(wordcountBuf), "%lu", static_cast<unsigned long>(currentInfo.wordcount));
+      snprintf(synBuf, sizeof(synBuf), "%lu", static_cast<unsigned long>(currentInfo.synwordcount));
+
+      if (!currentInfo.valid) {
+        renderer.drawText(UI_10_FONT_ID, x, y, tr(STR_DICT_NO_METADATA));
+      } else {
+        drawWrapped("Name", currentInfo.bookname);
+        drawLine("Words", wordcountBuf);
+        if (currentInfo.hasSyn) drawLine("Synonyms", synBuf);
+        drawLine("Date", currentInfo.date);
+        drawWrapped("Website", currentInfo.website);
+        drawWrapped("Description", currentInfo.description);
+        drawLine("Type", currentInfo.sametypesequence);
+        if (currentInfo.isCompressed) {
+          drawWrapped("Status", "Compressed (.dict.dz) -- extract before use");
+        }
+      }
+
+      const auto labels =
+          mappedInput.mapLabels(tr(STR_BACK), tr(STR_DICT_VIEW_RAW), "", "");
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
 
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -401,7 +516,6 @@ void DictionarySelectActivity::render(RenderLock&&) {
       },
       true);
 
-  // Button hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 

@@ -66,14 +66,13 @@ bool Dictionary::hasSyn() {
 bool Dictionary::isValidDictionary() {
   const char* folderPath = SETTINGS.dictionaryPath;
   if (folderPath[0] == '\0') return false;
-  // Single buffer reused for each path check — 3 x char[520] simultaneously would waste 1040 bytes.
+  // Single buffer reused for each path check — 2 x char[520] simultaneously would waste 520 bytes.
+  // .ifo is not required; a dictionary without metadata is still usable.
   char pathBuf[520];
-  snprintf(pathBuf, sizeof(pathBuf), "%s.ifo", folderPath);
-  const bool ifoExists = Storage.exists(pathBuf);
   snprintf(pathBuf, sizeof(pathBuf), "%s.idx", folderPath);
   const bool idxExists = Storage.exists(pathBuf);
   snprintf(pathBuf, sizeof(pathBuf), "%s.dict", folderPath);
-  const bool valid = ifoExists && idxExists && Storage.exists(pathBuf);
+  const bool valid = idxExists && Storage.exists(pathBuf);
   if (!valid) {
     LOG_DBG("DICT", "Stored dictionary path no longer valid, resetting");
     SETTINGS.dictionaryPath[0] = '\0';

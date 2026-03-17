@@ -30,9 +30,14 @@ class DictionarySelectActivity final : public Activity {
   int selectedIndex = 0;
   int totalItems = 0;
 
-  // Whether we are showing .ifo info for the currently highlighted dictionary.
+  // Whether we are showing the metadata info screen for the highlighted dictionary.
   bool showingInfo = false;
+  // When showingInfo is true: false = parsed field view, true = raw .ifo text view.
+  bool showingRaw = false;
+  // Parsed metadata from the .ifo file (populated on long-press).
   DictInfo currentInfo;
+  // Raw text content of the .ifo file; empty if no .ifo exists (populated on long-press).
+  std::string rawIfoContent;
 
   // Suppresses the Confirm release that bleeds through from the parent activity launch.
   bool ignoreNextConfirmRelease = false;
