@@ -19,7 +19,7 @@ void DictionaryWordSelectActivity::onEnter() {
   extractWords();
   mergeHyphenatedWords();
   if (!rows.empty()) {
-    currentRow = static_cast<int>(rows.size()) / 3;
+    currentRow = static_cast<int>(rows.size()) / 2;
     currentWordInRow = 0;
   }
   requestUpdate();
@@ -560,6 +560,9 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
       renderer.drawText(fontId, other.screenX, other.screenY, other.text.c_str(), false);
     }
   }
+
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
