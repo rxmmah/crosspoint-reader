@@ -1,7 +1,10 @@
 #include "DictionaryDefinitionActivity.h"
 
+#include <DictHtmlRenderer.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
+
+#include <memory>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -16,8 +19,12 @@ void DictionaryDefinitionActivity::onEnter() {
 
 void DictionaryDefinitionActivity::onExit() { Activity::onExit(); }
 
+// ---------------------------------------------------------------------------
+// Layout helpers — shared setup
+// ---------------------------------------------------------------------------
+
 void DictionaryDefinitionActivity::wrapText() {
-  wrappedLines.clear();
+  layoutLines.clear();
 
   const auto orient = renderer.getOrientation();
   const auto metrics = UITheme::getInstance().getMetrics();
@@ -31,50 +38,148 @@ void DictionaryDefinitionActivity::wrapText() {
   leftPadding = contentX + sidePadding;
   rightPadding = (isLandscapeCcw ? hintGutterWidth : 0) + sidePadding;
 
-  const int screenWidth = renderer.getScreenWidth();
   const int lineHeight = renderer.getLineHeight(readerFontId);
-  const int maxWidth = screenWidth - leftPadding - rightPadding;
   const int topArea = hintGutterHeight + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
 
   linesPerPage = (renderer.getScreenHeight() - topArea - bottomArea) / lineHeight;
   if (linesPerPage < 1) linesPerPage = 1;
 
-  // Process definition text, splitting on \n and word-wrapping
-  std::string currentLine;
+  // Choose rendering path based on dictionary content type
+  const DictInfo info = Dictionary::readInfo(Dictionary::getActivePath());
+  if (info.valid && info.sametypesequence[0] == 'h') {
+    wrapHtml();
+  } else {
+    wrapPlain();
+  }
+
+  totalPages = (static_cast<int>(layoutLines.size()) + linesPerPage - 1) / linesPerPage;
+  if (totalPages < 1) totalPages = 1;
+}
+
+// ---------------------------------------------------------------------------
+// HTML path: run DictHtmlRenderer, lay out spans into LayoutLines
+// ---------------------------------------------------------------------------
+
+void DictionaryDefinitionActivity::wrapHtml() {
+  const int screenWidth = renderer.getScreenWidth();
+  const int maxWidth = screenWidth - leftPadding - rightPadding;
+
+  // Indent step: 3 spaces worth of pixels at regular weight
+  const int indentStep = renderer.getTextWidth(readerFontId, "   ");
+  const int bulletWidth = renderer.getTextWidth(readerFontId, "- ");
+
+  // Heap-allocate the renderer — textBuf[8192] is too large for the stack
+  auto htmlRenderer = std::make_unique<DictHtmlRenderer>();
+  const auto& spans = htmlRenderer->render(definition.c_str(), static_cast<int>(definition.size()));
+
+  LayoutLine currentLine;
+  int currentX = 0;
+
+  auto flushLine = [&]() {
+    if (!currentLine.segments.empty()) {
+      layoutLines.push_back(std::move(currentLine));
+      currentLine = LayoutLine{};
+    }
+  };
+
+  auto startLine = [&](uint8_t indent, bool listItem) {
+    currentLine.indentLevel = indent;
+    currentLine.isListItem = listItem;
+    currentX = indent * indentStep + (listItem ? bulletWidth : 0);
+  };
+
+  startLine(0, false);
+
+  for (const auto& span : spans) {
+    if (!span.text || span.text[0] == '\0') continue;
+
+    EpdFontFamily::Style style;
+    if (span.bold && span.italic) {
+      style = EpdFontFamily::BOLD_ITALIC;
+    } else if (span.bold) {
+      style = EpdFontFamily::BOLD;
+    } else if (span.italic) {
+      style = EpdFontFamily::ITALIC;
+    } else {
+      style = EpdFontFamily::REGULAR;
+    }
+
+    if (span.newlineBefore) {
+      flushLine();
+      startLine(span.indentLevel, span.isListItem);
+    }
+
+    // Treat each span as an atomic unit for line-breaking.
+    // If it doesn't fit, wrap to a continuation line (no bullet/list marking).
+    int spanWidth = renderer.getTextWidth(readerFontId, span.text, style);
+    if (currentX + spanWidth > maxWidth && !currentLine.segments.empty()) {
+      flushLine();
+      startLine(span.indentLevel, false);
+    }
+
+    // Append to last segment if same style, otherwise create new segment.
+    // Text is copied from the renderer's internal buffer into std::string.
+    if (!currentLine.segments.empty() && currentLine.segments.back().style == style) {
+      currentLine.segments.back().text += span.text;
+    } else {
+      currentLine.segments.push_back({std::string(span.text), style});
+    }
+    currentX += spanWidth;
+  }
+
+  flushLine();
+  // htmlRenderer freed here; span text has been copied into layoutLines
+}
+
+// ---------------------------------------------------------------------------
+// Plain text path: word-wrap into single-segment REGULAR lines
+// ---------------------------------------------------------------------------
+
+void DictionaryDefinitionActivity::wrapPlain() {
+  const int screenWidth = renderer.getScreenWidth();
+  const int maxWidth = screenWidth - leftPadding - rightPadding;
+
   std::string currentWord;
+  std::string currentLineText;
+
+  auto flushLine = [&]() {
+    LayoutLine line;
+    line.segments.push_back({currentLineText, EpdFontFamily::REGULAR});
+    layoutLines.push_back(std::move(line));
+    currentLineText.clear();
+  };
 
   for (size_t i = 0; i <= definition.size(); i++) {
     char c = (i < definition.size()) ? definition[i] : '\0';
 
     if (c == '\n' || c == '\0') {
       if (!currentWord.empty()) {
-        if (currentLine.empty()) {
-          currentLine = currentWord;
+        if (currentLineText.empty()) {
+          currentLineText = currentWord;
         } else {
-          std::string test = currentLine + " " + currentWord;
+          std::string test = currentLineText + " " + currentWord;
           if (renderer.getTextWidth(readerFontId, test.c_str()) <= maxWidth) {
-            currentLine = test;
+            currentLineText = test;
           } else {
-            wrappedLines.push_back(currentLine);
-            currentLine = currentWord;
+            flushLine();
+            currentLineText = currentWord;
           }
         }
         currentWord.clear();
       }
-      wrappedLines.push_back(currentLine);
-      currentLine.clear();
+      flushLine();
     } else if (c == ' ') {
       if (!currentWord.empty()) {
-        if (currentLine.empty()) {
-          currentLine = currentWord;
+        if (currentLineText.empty()) {
+          currentLineText = currentWord;
         } else {
-          std::string test = currentLine + " " + currentWord;
+          std::string test = currentLineText + " " + currentWord;
           if (renderer.getTextWidth(readerFontId, test.c_str()) <= maxWidth) {
-            currentLine = test;
+            currentLineText = test;
           } else {
-            wrappedLines.push_back(currentLine);
-            currentLine = currentWord;
+            flushLine();
+            currentLineText = currentWord;
           }
         }
         currentWord.clear();
@@ -83,10 +188,11 @@ void DictionaryDefinitionActivity::wrapText() {
       currentWord += c;
     }
   }
-
-  totalPages = (static_cast<int>(wrappedLines.size()) + linesPerPage - 1) / linesPerPage;
-  if (totalPages < 1) totalPages = 1;
 }
+
+// ---------------------------------------------------------------------------
+// Input loop
+// ---------------------------------------------------------------------------
 
 void DictionaryDefinitionActivity::loop() {
   const bool prevPage = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
@@ -119,11 +225,16 @@ void DictionaryDefinitionActivity::loop() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
+
 void DictionaryDefinitionActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto metrics = UITheme::getInstance().getMetrics();
   const int lineHeight = renderer.getLineHeight(readerFontId);
+  const int indentStep = renderer.getTextWidth(readerFontId, "   ");
 
   // Header
   GUI.drawHeader(renderer,
@@ -132,14 +243,25 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
                  headword.c_str());
   const int bodyStartY = hintGutterHeight + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
 
-  // Body: wrapped definition lines using the reader font
-  int startLine = currentPage * linesPerPage;
-  for (int i = 0; i < linesPerPage && (startLine + i) < static_cast<int>(wrappedLines.size()); i++) {
-    int y = bodyStartY + i * lineHeight;
-    renderer.drawText(readerFontId, leftPadding, y, wrappedLines[startLine + i].c_str());
+  // Body: draw layout lines for the current page
+  const int startLine = currentPage * linesPerPage;
+  for (int i = 0; i < linesPerPage && (startLine + i) < static_cast<int>(layoutLines.size()); i++) {
+    const LayoutLine& line = layoutLines[startLine + i];
+    const int y = bodyStartY + i * lineHeight;
+    int x = leftPadding + line.indentLevel * indentStep;
+
+    if (line.isListItem) {
+      renderer.drawText(readerFontId, x, y, "- ");
+      x += renderer.getTextWidth(readerFontId, "- ");
+    }
+
+    for (const auto& seg : line.segments) {
+      renderer.drawText(readerFontId, x, y, seg.text.c_str(), true, seg.style);
+      x += renderer.getTextWidth(readerFontId, seg.text.c_str(), seg.style);
+    }
   }
 
-  // Pagination indicator on bottom right
+  // Pagination indicator
   if (totalPages > 1) {
     std::string pageInfo = std::to_string(currentPage + 1) + "/" + std::to_string(totalPages);
     int textWidth = renderer.getTextWidth(SMALL_FONT_ID, pageInfo.c_str());

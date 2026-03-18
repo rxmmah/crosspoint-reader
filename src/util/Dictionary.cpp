@@ -150,6 +150,8 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
       strncpy(info.date, val, sizeof(info.date) - 1);
     } else if (strcmp(key, "description") == 0) {
       strncpy(info.description, val, sizeof(info.description) - 1);
+    } else if (strcmp(key, "lang") == 0) {
+      strncpy(info.lang, val, sizeof(info.lang) - 1);
     }
 
     // Restore all modified characters so the outer loop can continue correctly.

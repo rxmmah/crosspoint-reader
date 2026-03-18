@@ -1,4 +1,6 @@
 #pragma once
+#include <EpdFontFamily.h>
+
 #include <string>
 #include <vector>
 
@@ -27,7 +29,20 @@ class DictionaryDefinitionActivity final : public Activity {
   int readerFontId;
   bool showDoneButton;
 
-  std::vector<std::string> wrappedLines;
+  // A single styled run within a display line.
+  struct LayoutSegment {
+    std::string text;
+    EpdFontFamily::Style style = EpdFontFamily::REGULAR;
+  };
+
+  // One wrapped display line, containing one or more styled segments.
+  struct LayoutLine {
+    std::vector<LayoutSegment> segments;
+    uint8_t indentLevel = 0;
+    bool isListItem = false;
+  };
+
+  std::vector<LayoutLine> layoutLines;
   int currentPage = 0;
   int linesPerPage = 0;
   int totalPages = 0;
@@ -40,4 +55,6 @@ class DictionaryDefinitionActivity final : public Activity {
   int hintGutterWidth = 0;
 
   void wrapText();
+  void wrapHtml();
+  void wrapPlain();
 };
