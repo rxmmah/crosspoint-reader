@@ -73,6 +73,25 @@ void DictionarySelectActivity::onEnter() {
         }
       }
     }
+
+    // Build augmented "Use Global" label showing the active global dictionary name.
+    // Path format: /dictionary/<folder>/<stem> — extract <folder>.
+    const char* globalPath = SETTINGS.dictionaryPath;
+    std::string globalFolderName;
+    if (globalPath[0] == '\0') {
+      globalFolderName = tr(STR_DICT_NONE);
+    } else {
+      std::string p(globalPath);
+      const size_t lastSlash = p.rfind('/');
+      if (lastSlash != std::string::npos && lastSlash > 0) {
+        const size_t prevSlash = p.rfind('/', lastSlash - 1);
+        globalFolderName = (prevSlash != std::string::npos) ? p.substr(prevSlash + 1, lastSlash - prevSlash - 1)
+                                                            : p.substr(0, lastSlash);
+      } else {
+        globalFolderName = p;
+      }
+    }
+    useGlobalLabel = std::string(tr(STR_DICT_USE_GLOBAL)) + " (" + globalFolderName + ")";
   }
 
   totalItems = 1 + static_cast<int>(dictFolders.size());
@@ -200,7 +219,7 @@ std::string DictionarySelectActivity::folderForIndex(int index) const {
 }
 
 const char* DictionarySelectActivity::nameForIndex(int index) const {
-  if (index == 0) return bookCachePath.empty() ? tr(STR_DICT_NONE) : tr(STR_DICT_USE_GLOBAL);
+  if (index == 0) return bookCachePath.empty() ? tr(STR_DICT_NONE) : useGlobalLabel.c_str();
   if (index <= static_cast<int>(dictFolders.size())) return dictFolders[index - 1].c_str();
   return "";
 }

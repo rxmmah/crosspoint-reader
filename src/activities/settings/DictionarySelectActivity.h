@@ -46,6 +46,9 @@ class DictionarySelectActivity final : public Activity {
   std::string bookCachePath;
   // Active per-book dictionary path loaded on enter; empty = "Use Global".
   std::string currentBookDictPath;
+  // Augmented "Use Global" label showing the global dict name, e.g. "Use Global (dict-en-en)".
+  // Only populated in per-book mode.
+  std::string useGlobalLabel;
 
   ButtonNavigator buttonNavigator;
 
