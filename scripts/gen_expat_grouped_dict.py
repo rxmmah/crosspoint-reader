@@ -49,7 +49,7 @@ ENTRIES = [
     #    Three cases: single-word title, multi-word title, element inside abbr.
     # ------------------------------------------------------------------
     (
-        "AbbrExpand",
+        "BlazeSilent",
         (
             "<p>Three abbreviations should expand inline with their full title in parentheses.</p>"
             "<p>Case 1: single-word title. Expected: c. (circa)</p>"
@@ -64,19 +64,21 @@ ENTRIES = [
     ),
 
     # ------------------------------------------------------------------
-    # 2. Strip entirely — hiero, svg, math, gallery, nowiki, poem, ref, REF
-    #    Nothing should appear between the rules (all 8 blocks stripped).
+    # 2. Strip entirely — hiero, svg, math, gallery, nowiki, poem, ref, REF, img
+    #    Nothing should appear between the rules (all 9 blocks stripped).
     # ------------------------------------------------------------------
     (
-        "BlockStrip",
+        "ClearSvg",
         (
-            "<p>Eight block tags and all their children should be stripped entirely.</p>"
+            "<p>Nine block tags and all their children should be stripped entirely.</p>"
             "<p>Nothing should appear between the two rules below.</p>"
             "<p>Tags tested: hiero (with nested table/tr/td/img), svg (with defs/g/path/rect),"
-            " math (with sup), gallery, nowiki, poem, ref (lowercase), REF (uppercase).</p>"
+            " math (with sup), gallery, nowiki, poem, ref (lowercase), REF (uppercase),"
+            " img (standalone).</p>"
             + SEP
             + "<hiero><table class=\"mw-hiero-table\"><tr><td>"
             + "<img src=\"x.gif\" alt=\"glyph\"/></td></tr></table></hiero>"
+            + "<img src=\"test.gif\"/>"
             + "<svg width=\"10\" height=\"10\"><defs/><g>"
             + "<path d=\"M 0 0\"/><rect width=\"5\" height=\"5\"/></g></svg>"
             + "<math>x<sup>2</sup> + y<sup>2</sup></math>"
@@ -93,7 +95,7 @@ ENTRIES = [
     # 3. Block structure — p, div, br, blockquote, ol+li, ul+li, h1-h4
     # ------------------------------------------------------------------
     (
-        "BlockStruct",
+        "DarkMath",
         (
             "<p>Block structure elements. Expected output in order:</p>"
             "<p>Two separate paragraphs. Two div blocks. Three lines separated by br."
@@ -122,7 +124,7 @@ ENTRIES = [
     #    small, big, var, and two nested combinations.
     # ------------------------------------------------------------------
     (
-        "FormatTags",
+        "EmptyGallery",
         (
             "<p>Inline formatting tags. Expected words with their styles:</p>"
             "<p>bold (b), bold (strong), italic (i), italic (em), underline (u),"
@@ -147,7 +149,7 @@ ENTRIES = [
     # 5. Strip tag, keep text — span, single unknown tag, nested unknown tags
     # ------------------------------------------------------------------
     (
-        "StripKeep",
+        "FrostNowiki",
         (
             "<p>Three cases where the tag is stripped but its text content is kept.</p>"
             "<p>Case 1: span tag stripped, text kept. Expected: visible span text</p>"
@@ -168,7 +170,7 @@ ENTRIES = [
     #    Eight annotation types: t:, tr:, lang:, gloss:, pos:, sc:, alt:, id:
     # ------------------------------------------------------------------
     (
-        "WikiAnnot",
+        "GlowPoem",
         (
             "<p>Eight wikitext annotation tags. Each is a self-closing tag of the form"
             " XX:YY where the text to render is the suffix YY (the part after the colon).</p>"

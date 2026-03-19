@@ -397,12 +397,12 @@ int main(int argc, char** argv) {
   };
 
   const TestCase tests[] = {
-      {"AbbrExpand",  kAbbrExpand,  false},
-      {"BlockStrip",  kBlockStrip,  false},
-      {"BlockStruct", kBlockStruct, false},
-      {"FormatTags",  kFormatTags,  false},
-      {"StripKeep",   kStripKeep,   true},
-      {"WikiAnnot",   kWikiAnnot,   false},
+      {"BlazeSilent",   kAbbrExpand,  false},
+      {"ClearSvg",      kBlockStrip,  false},
+      {"DarkMath",      kBlockStruct, false},
+      {"EmptyGallery",  kFormatTags,  false},
+      {"FrostNowiki",   kStripKeep,   true},
+      {"GlowPoem",      kWikiAnnot,   false},
   };
 
   for (const auto& test : tests) {

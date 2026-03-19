@@ -89,6 +89,15 @@ void DictionaryDefinitionActivity::wrapHtml() {
     currentX = indent * indentStep + (listItem ? bulletWidth : 0);
   };
 
+  auto appendToLine = [&](const std::string& text, EpdFontFamily::Style style, int width) {
+    if (!currentLine.segments.empty() && currentLine.segments.back().style == style) {
+      currentLine.segments.back().text += text;
+    } else {
+      currentLine.segments.push_back({text, style});
+    }
+    currentX += width;
+  };
+
   startLine(0, false);
 
   for (const auto& span : spans) {
@@ -110,22 +119,39 @@ void DictionaryDefinitionActivity::wrapHtml() {
       startLine(span.indentLevel, span.isListItem);
     }
 
-    // Treat each span as an atomic unit for line-breaking.
-    // If it doesn't fit, wrap to a continuation line (no bullet/list marking).
     int spanWidth = renderer.getTextWidth(readerFontId, span.text, style);
-    if (currentX + spanWidth > maxWidth && !currentLine.segments.empty()) {
-      flushLine();
-      startLine(span.indentLevel, false);
-    }
-
-    // Append to last segment if same style, otherwise create new segment.
-    // Text is copied from the renderer's internal buffer into std::string.
-    if (!currentLine.segments.empty() && currentLine.segments.back().style == style) {
-      currentLine.segments.back().text += span.text;
+    if (currentX + spanWidth <= maxWidth) {
+      // Fast path: entire span fits on the current line.
+      appendToLine(std::string(span.text), style, spanWidth);
     } else {
-      currentLine.segments.push_back({std::string(span.text), style});
+      // Word-wrap within the span.
+      // Each word is placed on the current line if it fits; otherwise a new
+      // continuation line is started. A word that is wider than maxWidth on
+      // its own is still placed (can't break within a word).
+      const char* p = span.text;
+      while (*p) {
+        bool hadSpace = false;
+        while (*p == ' ') { hadSpace = true; ++p; }
+        if (!*p) break;
+
+        const char* tokStart = p;
+        while (*p && *p != ' ') ++p;
+        std::string tok(tokStart, p - tokStart);
+
+        bool lineIsEmpty = currentLine.segments.empty();
+        std::string candidate = (!lineIsEmpty && hadSpace) ? " " + tok : tok;
+        int candidateWidth = renderer.getTextWidth(readerFontId, candidate.c_str(), style);
+
+        if (currentX + candidateWidth > maxWidth && !lineIsEmpty) {
+          flushLine();
+          startLine(span.indentLevel, false);
+          candidate = tok;
+          candidateWidth = renderer.getTextWidth(readerFontId, tok.c_str(), style);
+        }
+
+        appendToLine(candidate, style, candidateWidth);
+      }
     }
-    currentX += spanWidth;
   }
 
   flushLine();
