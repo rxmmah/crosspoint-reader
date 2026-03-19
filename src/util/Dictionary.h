@@ -18,7 +18,7 @@ struct DictInfo {
   uint32_t idxfilesize = 0;
   bool hasAltForms = false;
   bool isCompressed = false;  // .dict.dz present but no .dict
-  char lang[32] = "";  // e.g. "en-en", "el-el"
+  char lang[32] = "";         // e.g. "en-en", "el-el"
   bool valid = false;
 };
 

@@ -131,7 +131,10 @@ void DictionaryDefinitionActivity::wrapHtml() {
       const char* p = span.text;
       while (*p) {
         bool hadSpace = false;
-        while (*p == ' ') { hadSpace = true; ++p; }
+        while (*p == ' ') {
+          hadSpace = true;
+          ++p;
+        }
         if (!*p) break;
 
         const char* tokStart = p;

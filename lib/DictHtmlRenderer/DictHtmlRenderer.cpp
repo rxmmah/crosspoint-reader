@@ -64,7 +64,7 @@ DictHtmlRenderer::TagAction DictHtmlRenderer::classify(const XML_Char* name) {
   if (strcmp(name, "abbr") == 0) return TagAction::ABBR;
   if (strcmp(name, "var") == 0) return TagAction::VAR;
   if (strcmp(name, "span") == 0) return TagAction::SPAN;
-  if (strcmp(name, "a") == 0) return TagAction::SPAN;  // Registered; no actual anchors in dict
+  if (strcmp(name, "a") == 0) return TagAction::SPAN;            // Registered; no actual anchors in dict
   if (strcmp(name, "_root") == 0) return TagAction::REGISTERED;  // Synthetic wrapper used by render()
 
   // Wikitext annotation tags: t:XX, tr:XX, lang:XX, gloss:XX, pos:XX, sc:XX, alt:XX, id:XX
@@ -182,8 +182,7 @@ void XMLCALL DictHtmlRenderer::onStart(void* ud, const XML_Char* name, const XML
   TagAction action = classify(name);
 
   // Propagate suppression from parent
-  bool parentSuppresses =
-      self->stackDepth > 0 && self->stack[self->stackDepth - 1].suppressChildren;
+  bool parentSuppresses = self->stackDepth > 0 && self->stack[self->stackDepth - 1].suppressChildren;
 
   StackEntry entry{};
   entry.action = action;
@@ -398,8 +397,7 @@ void XMLCALL DictHtmlRenderer::onText(void* ud, const XML_Char* s, int len) {
   if (self->stackDepth > 0) {
     const StackEntry& top = self->stack[self->stackDepth - 1];
     // Suppress text inside block-strip and for wiki-annot (emit from tag name, not body)
-    if (top.suppressChildren || top.action == TagAction::WIKI_ANNOT ||
-        top.action == TagAction::BLOCK_STRIP) {
+    if (top.suppressChildren || top.action == TagAction::WIKI_ANNOT || top.action == TagAction::BLOCK_STRIP) {
       return;
     }
   }
@@ -450,8 +448,8 @@ const std::vector<StyledSpan>& DictHtmlRenderer::render(const char* html, int le
 
 #ifdef DICT_HTML_RENDERER_TRACK_UNKNOWN
 
-void DictHtmlRenderer::recordUnknownTag(const char* tagName, const char* wordBefore,
-                                         const char* tagContents, const char* wordAfter) {
+void DictHtmlRenderer::recordUnknownTag(const char* tagName, const char* wordBefore, const char* tagContents,
+                                        const char* wordAfter) {
   if (unknownTagCount >= MAX_UNKNOWN_TAGS) return;
   UnknownTagInfo& info = unknownTags[unknownTagCount++];
   strncpy(info.tag, tagName, sizeof(info.tag) - 1);
@@ -473,11 +471,12 @@ void DictHtmlRenderer::extractLastWord(const char* text, int len, char* out, int
   }
   int end = len - 1;
   while (end >= 0 && (text[end] == ' ' || text[end] == '\t' || text[end] == '\n')) end--;
-  if (end < 0) { out[0] = '\0'; return; }
+  if (end < 0) {
+    out[0] = '\0';
+    return;
+  }
   int start = end;
-  while (start > 0 && text[start - 1] != ' ' && text[start - 1] != '\t' &&
-         text[start - 1] != '\n')
-    start--;
+  while (start > 0 && text[start - 1] != ' ' && text[start - 1] != '\t' && text[start - 1] != '\n') start--;
   int wlen = end - start + 1;
   if (wlen >= outSize) wlen = outSize - 1;
   memcpy(out, text + start, wlen);
