@@ -1,0 +1,72 @@
+<h1>2. Dictionary Picker -- Scanner Validation</h1>
+
+<p>Place all test dictionaries in /dictionary/ on the SD card.
+No word lookups are performed in this chapter.
+Open Settings -> Dictionary for every test below.</p>
+
+<h2>Test A: Folder without .ifo is hidden</h2>
+<p>The <em>no-ifo</em> folder must not appear in the picker list.</p>
+<h3>Dictionary</h3>
+<p><em>no-ifo</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Open the dictionary picker.</li>
+<li>Confirm <em>no-ifo</em> is absent from the list.</li>
+</ol>
+
+<h2>Test B: Folder with only .dict is hidden</h2>
+<p>The <em>only-dict</em> folder must not appear in the picker list.</p>
+<h3>Dictionary</h3>
+<p><em>only-dict</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Open the dictionary picker.</li>
+<li>Confirm <em>only-dict</em> is absent from the list.</li>
+</ol>
+
+<h2>Test C: Folder with multiple .ifo files is hidden</h2>
+<p>The <em>multi-ifo</em> folder must not appear in the picker list.</p>
+<h3>Dictionary</h3>
+<p><em>multi-ifo</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Open the dictionary picker.</li>
+<li>Confirm <em>multi-ifo</em> is absent from the list.</li>
+</ol>
+
+<h2>Test D: All test dictionaries appear in picker</h2>
+<p>All of the following must be visible in the picker. Do not select any yet.</p>
+<h3>Words</h3>
+<ul>
+<li><em>all-prep</em></li>
+<li><em>basic</em></li>
+<li><em>en-es</em></li>
+<li><em>extract-dict</em></li>
+<li><em>extract-syn-gen-syn</em></li>
+<li><em>fail-decompress</em></li>
+<li><em>full</em></li>
+<li><em>gen-idx</em></li>
+<li><em>gen-syn</em></li>
+<li><em>long-prep</em></li>
+<li><em>mini-prep</em></li>
+<li><em>phrase</em></li>
+<li><em>phrase-syn</em></li>
+</ul>
+<h3>Note</h3>
+<p><em>long-prep</em> and <em>mini-prep</em> are for Ch 4 per-book prepare tests only.
+Do not select them from Settings.</p>
+
+<h2>Test E: Failed decompression -- error shown, prior selection unchanged</h2>
+<p>The preparation must fail with an error. The picker must remain open
+and the previously selected dictionary must be unchanged. No crash.</p>
+<h3>Dictionary</h3>
+<p><em>fail-decompress</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Note the currently selected dictionary before starting.</li>
+<li>Select <em>fail-decompress</em> in the picker.</li>
+<li>The preparation screen appears listing one step: <em>Extract dictionary</em></li>
+<li>Press <em>Confirm</em>.</li>
+<li>Screen shows: <em>Preparation failed</em></li>
+<li>Picker remains open. Previously selected dictionary is unchanged.</li>
+</ol>

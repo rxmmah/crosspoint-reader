@@ -1,0 +1,37 @@
+<h1>13. No-Syn Dictionary</h1>
+
+<p><em>basic</em> has no .syn file. These tests verify the synonym prompt does
+not appear when no synonym file is present.</p>
+<h3>Dictionary</h3>
+<p><em>basic</em></p>
+
+<h2>Test A: No synonym prompt on lookup miss</h2>
+<p>These words are not headwords in <em>basic</em> and are not reachable by the
+stemmer. Because <em>basic</em> has no .syn file, the synonym prompt must not
+appear. The flow must go directly to fuzzy suggestions or not-found.</p>
+<h3>Words</h3>
+<ul>
+<li>blaze</li>
+<li>canopy</li>
+<li>coastline</li>
+<li>glades</li>
+<li>tundra</li>
+</ul>
+
+<h2>Test B: Done button on successful lookup</h2>
+<p>These words are headwords in <em>basic</em>. The definition screen must appear
+and the <em>Confirm</em> button must be labelled <em>Done</em>, not <em>Synonyms</em>. This confirms
+synAvailable is false when no .syn file is present.</p>
+<h3>Words</h3>
+<ul>
+<li>apple</li>
+<li>bridge</li>
+<li>cloud</li>
+<li>echo</li>
+<li>flame</li>
+<li>grove</li>
+<li>harvest</li>
+<li>ocean</li>
+<li>shadow</li>
+<li>zenith</li>
+</ul>
