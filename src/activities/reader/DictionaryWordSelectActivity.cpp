@@ -9,6 +9,7 @@
 #include <climits>
 
 #include "DictionaryDefinitionActivity.h"
+#include "DictionarySuggestionsActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -180,14 +181,35 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords() {
   rows.erase(std::remove_if(rows.begin(), rows.end(), [](const Row& r) { return r.wordIndices.empty(); }), rows.end());
 }
 
-// Shared helper: run findSimilar for `word` and show suggestions or "not found" popup.
+// Shared helper: run findSimilar for `word` and launch suggestions activity, or show "not found" popup.
 void DictionaryWordSelectActivity::handleNotFound(const std::string& word) {
   auto similar = Dictionary::findSimilar(word, 6);
   if (!similar.empty()) {
-    suggestionWords = std::move(similar);
-    suggestionIndex = 0;
-    isShowingSuggestions = true;
-    requestUpdate();
+    startActivityForResult(
+        std::make_unique<DictionarySuggestionsActivity>(renderer, mappedInput, std::move(similar), fontId),
+        [this](const ActivityResult& result) {
+          if (result.isCancelled) {
+            requestUpdate();
+            return;
+          }
+          const auto& wr = std::get<WordResult>(result.data);
+          std::string def = Dictionary::lookup(wr.word);
+          if (!def.empty()) {
+            startActivityForResult(
+                std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, wr.word, def, fontId, true),
+                [this](const ActivityResult& r) {
+                  if (!r.isCancelled) {
+                    setResult(ActivityResult{});
+                    finish();
+                  } else {
+                    requestUpdate();
+                  }
+                });
+          } else {
+            isShowingNotFound = true;
+            requestUpdate();
+          }
+        });
     return;
   }
   isShowingNotFound = true;
@@ -316,49 +338,6 @@ void DictionaryWordSelectActivity::loop() {
       return;
     }
     return;  // Consume all other input while on the alt-form prompt
-  }
-
-  // Inline suggestions list
-  if (isShowingSuggestions) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      isShowingSuggestions = false;
-      const std::string selected = suggestionWords[suggestionIndex];
-      std::string def = Dictionary::lookup(selected);
-      if (!def.empty()) {
-        startActivityForResult(
-            std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, selected, def, fontId, true),
-            [this](const ActivityResult& result) {
-              if (!result.isCancelled) {
-                setResult(ActivityResult{});
-                finish();
-              } else {
-                requestUpdate();
-              }
-            });
-      } else {
-        isShowingNotFound = true;
-        requestUpdate();
-      }
-      return;
-    }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      isShowingSuggestions = false;
-      requestUpdate();
-      return;
-    }
-    const bool prevItem = mappedInput.wasReleased(MappedInputManager::Button::Up) ||
-                          mappedInput.wasReleased(MappedInputManager::Button::Left);
-    const bool nextItem = mappedInput.wasReleased(MappedInputManager::Button::Down) ||
-                          mappedInput.wasReleased(MappedInputManager::Button::Right);
-    if (prevItem && suggestionIndex > 0) {
-      suggestionIndex--;
-      requestUpdate();
-    }
-    if (nextItem && suggestionIndex < static_cast<int>(suggestionWords.size()) - 1) {
-      suggestionIndex++;
-      requestUpdate();
-    }
-    return;
   }
 
   bool changed = false;
@@ -507,23 +486,6 @@ void DictionaryWordSelectActivity::runLookup() {
 
 void DictionaryWordSelectActivity::render(RenderLock&&) {
   renderer.clearScreen();
-
-  // Inline suggestions list
-  if (isShowingSuggestions) {
-    const int pageWidth = renderer.getScreenWidth();
-    const int pageHeight = renderer.getScreenHeight();
-    const auto& metrics = UITheme::getInstance().getMetrics();
-    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_DID_YOU_MEAN));
-    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-    const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-    GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(suggestionWords.size()),
-        suggestionIndex, [this](int i) { return suggestionWords[i]; }, nullptr, nullptr, nullptr, true);
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-    return;
-  }
 
   // "Search alternate forms?" prompt
   if (isAskingAltFormSearch) {

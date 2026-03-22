@@ -72,11 +72,6 @@ class DictionaryWordSelectActivity final : public Activity {
   bool isAskingAltFormSearch = false;
   std::string altFormSearchWord;
 
-  // State for inline suggestions list shown when no direct/stem/alt-form match found
-  bool isShowingSuggestions = false;
-  std::vector<std::string> suggestionWords;
-  int suggestionIndex = 0;
-
   // State for persistent "not found" popup (dismissed by user via Done or Back)
   bool isShowingNotFound = false;
 
