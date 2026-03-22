@@ -1,0 +1,90 @@
+<h1>17. ExpAT HTML Renderer Tests [Draft]</h1>
+
+<p><strong>Not implemented:</strong> The firmware code supporting this chapter does not exist yet. These tests cannot be performed.</p>
+
+<p><strong><em>DRAFT: This chapter is incomplete and subject to change.</em></strong></p>
+
+<p>This chapter tests the expat-based HTML renderer used to display dictionary
+definitions. Set the active dictionary to <em>expat-full</em> before starting. Each test
+names a synthetic word to look up. Verify the definition screen matches the
+description shown at the top of the definition.</p>
+
+<p>Do not use <em>expat-full</em> for any other chapter in this book.</p>
+
+<h2>Category 1: Strip Entirely (8 tests)</h2>
+<p>Each definition should show the description followed by two rules with
+nothing between them. If any text appears between the rules, the tag is not
+being stripped correctly.</p>
+<ul>
+<li><strong>BlazeSilent</strong> -- hiero block</li>
+<li><strong>ClearSvg</strong> -- svg block</li>
+<li><strong>DarkMath</strong> -- math block</li>
+<li><strong>EmptyGallery</strong> -- gallery tag</li>
+<li><strong>FrostNowiki</strong> -- nowiki tag</li>
+<li><strong>GlowPoem</strong> -- poem tag</li>
+<li><strong>HazeRef</strong> -- ref tag (lowercase)</li>
+<li><strong>IcyUpper</strong> -- REF tag (uppercase)</li>
+</ul>
+
+<h2>Category 2: Formatting (12 tests)</h2>
+<p>Each definition shows the expected formatting between the rules.</p>
+<ul>
+<li><strong>JadeBold</strong> -- b element: word appears bold</li>
+<li><strong>KelpItalic</strong> -- i element: word appears italic</li>
+<li><strong>LimeSub</strong> -- sub element: subscript digit in H2O</li>
+<li><strong>MistSup</strong> -- sup element: superscript digit in x2</li>
+<li><strong>NightUnder</strong> -- u element: word appears underlined</li>
+<li><strong>OakStrike</strong> -- s element: word appears with strikethrough</li>
+<li><strong>PineCode</strong> -- code element: text appears in code style</li>
+<li><strong>QuartzSmall</strong> -- small element: word appears small</li>
+<li><strong>ReedBig</strong> -- big element: word appears big</li>
+<li><strong>SageVar</strong> -- var element: variable name appears italic</li>
+<li><strong>TealNested</strong> -- nested b and i: three words with different formatting</li>
+<li><strong>UmberDeep</strong> -- nested b, i, and u: four words with increasing formatting</li>
+</ul>
+
+<h2>Category 3: Block Structure (10 tests)</h2>
+<p>Each definition shows the expected block layout between the rules.</p>
+<ul>
+<li><strong>AlumList</strong> -- ul+li: bulleted list of three items</li>
+<li><strong>BronzeHead1</strong> -- h1: bold heading</li>
+<li><strong>CopperHead2</strong> -- h2: bold heading</li>
+<li><strong>DuskHead3</strong> -- h3: bold heading</li>
+<li><strong>ElmHead4</strong> -- h4: bold heading</li>
+<li><strong>VinePara</strong> -- p: two paragraphs separated by blank line</li>
+<li><strong>WildDiv</strong> -- div: two blocks separated by line break</li>
+<li><strong>XenBreak</strong> -- br: three lines on separate lines</li>
+<li><strong>YewQuote</strong> -- blockquote: indented passage</li>
+<li><strong>ZincOrder</strong> -- ol+li: numbered list of three items</li>
+</ul>
+
+<h2>Category 4: Wikitext Annotations (8 tests)</h2>
+<p>Each definition shows text extracted from the tag name suffix of a
+self-closing wikitext annotation tag. The tag itself should not appear.</p>
+<ul>
+<li><strong>FernTranslate</strong> -- t: tag: word "four" appears inline</li>
+<li><strong>GoldTranslit</strong> -- tr: tag: text "oikos" appears inline</li>
+<li><strong>HullLang</strong> -- lang: tag: text "la" appears inline</li>
+<li><strong>IronGloss</strong> -- gloss: tag: text "sharp" appears inline</li>
+<li><strong>JetPos</strong> -- pos: tag: text "noun" appears inline</li>
+<li><strong>KobaltScript</strong> -- sc: tag: text "Grek" appears inline</li>
+<li><strong>LarchAlt</strong> -- alt: tag: text "ameba" appears inline</li>
+<li><strong>MapleId</strong> -- id: tag: text "female" appears inline</li>
+</ul>
+
+<h2>Category 5: Abbr Title Expansion (3 tests)</h2>
+<p>Each definition shows the abbr text followed by the title in parentheses.</p>
+<ul>
+<li><strong>NebulAbbr</strong> -- basic: "c. (circa)"</li>
+<li><strong>OakAbbrEntity</strong> -- multi-word title: "AD (anno Domini)"</li>
+<li><strong>PearlAbbrNest</strong> -- italic inside abbr: "f. (filius)" with f. italic</li>
+</ul>
+
+<h2>Category 6: Strip-Tag Keep-Text (3 tests)</h2>
+<p>Each definition shows the text content of the stripped tag between the rules.
+The tag itself should not appear, only its text content.</p>
+<ul>
+<li><strong>QuillUnknown</strong> -- single unknown tag: "visible text" appears</li>
+<li><strong>RubyNested</strong> -- nested unknown tags: "inner text" appears</li>
+<li><strong>SteelSpan</strong> -- span element: "visible span" appears</li>
+</ul>

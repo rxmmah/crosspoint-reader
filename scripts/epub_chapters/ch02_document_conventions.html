@@ -1,0 +1,45 @@
+<h1>2. Document Conventions</h1>
+
+<h2>Formatting</h2>
+<p>Italic text is verbatim on-screen text -- the exact words shown on the device.</p>
+<ul>
+<li>Select <em>full</em> in the picker. -- <em>full</em> is the dictionary name as shown</li>
+<li>Press <em>Confirm</em>. -- <em>Confirm</em> is the button label as shown</li>
+<li>Screen shows: <em>Preparation complete</em> -- <em>Preparation complete</em> is the status message as shown</li>
+</ul>
+
+<h2>List types</h2>
+<ul>
+<li>Numbered list -- ordered steps. Follow them in sequence.</li>
+<li>Bulleted list -- unordered items. Try them in any order.</li>
+</ul>
+
+<h2>Test section structure</h2>
+<p>Each test section may contain the following sub-headings, in this order. Sub-headings are omitted when they do not apply.</p>
+<table>
+<tr><td><strong>Dictionary</strong></td><td>Which dictionary to have selected for this test</td></tr>
+<tr><td><strong>Note</strong></td><td>Special preconditions or warnings</td></tr>
+<tr><td><strong>Steps</strong></td><td>Ordered actions to perform</td></tr>
+<tr><td><strong>Words</strong></td><td>Items to look up or select</td></tr>
+<tr><td><strong>Additional</strong></td><td>Extra items for extended verification</td></tr>
+</table>
+
+<h2>Processing screen</h2>
+<p>Each preparation step shows a status prefix:</p>
+<table>
+<tr><td><em>[ &gt; ]</em></td><td>Step currently running (bold text)</td></tr>
+<tr><td><em>[OK]</em></td><td>Step completed successfully</td></tr>
+<tr><td><em>[!!]</em></td><td>Step failed (bold text)</td></tr>
+<tr><td><em>[&#160;&#160;&#160;]</em></td><td>Step not yet started</td></tr>
+</table>
+<p>After all steps finish, the screen shows either <em>Preparation complete</em> or <em>Preparation failed</em>.</p>
+
+<h2>Expected values</h2>
+<p>Some entries in a word list include the definition text to verify.</p>
+<ul>
+<li>fire -- expect: <em>fuego (m) / incendio (m)</em></li>
+</ul>
+<p>The text after <em>expect:</em> must match the definition screen exactly.</p>
+
+<h2>Draft chapters</h2>
+<p>Chapters with <em>[Draft]</em> in the title document features whose firmware code does not yet exist. Those tests cannot be performed.</p>

@@ -1,0 +1,62 @@
+<h1>16. Phrase Lookup [Draft]</h1>
+
+<p><strong>Not implemented:</strong> The firmware code supporting this chapter does not exist yet. These tests cannot be performed.</p>
+
+<p><strong><em>DRAFT: This chapter is incomplete and subject to change.</em></strong></p>
+
+<p>This chapter requires Phase 6 (multi-word selection), which is not yet
+implemented. The tests below are a placeholder and cannot be run until
+Phase 6 is complete.</p>
+
+<p>Two phrase test dictionaries are available:</p>
+<ul>
+<li><em>phrase</em> -- 25 multi-word headwords (2 to 6 words), no .syn file.</li>
+<li><em>phrase-syn</em> -- 35 multi-word headwords with a .syn file containing
+    35 alternate phrase forms (British/American variants, gerund/infinitive
+    pairs, abbreviated forms).</li>
+</ul>
+
+<h2>Test A: Direct phrase lookup</h2>
+<p>Using multi-word selection, select a complete phrase from the sample
+text below. The definition screen must appear immediately with no
+intermediate screens.</p>
+<h3>Dictionary</h3>
+<p><em>phrase</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Use multi-word selection to select a phrase from the sample text.</li>
+<li>Definition screen appears with no synonym prompt or suggestions screen.</li>
+</ol>
+
+<h2>Test B: No synonym prompt on miss (no .syn file)</h2>
+<p>Selecting a phrase not present in the dictionary must go directly to
+fuzzy suggestions or not-found. The synonym prompt must not appear
+because <em>phrase</em> has no .syn file.</p>
+<h3>Dictionary</h3>
+<p><em>phrase</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Select a phrase not in the dictionary.</li>
+<li>Synonym prompt does not appear.</li>
+<li>Falls directly to fuzzy suggestions or not-found.</li>
+</ol>
+
+<h2>Test C: Phrase synonym lookup</h2>
+<p>Selecting a phrase that is in .syn but not a direct headword must
+trigger the synonym prompt. Confirming must open the definition for
+the canonical phrase.</p>
+<h3>Dictionary</h3>
+<p><em>phrase-syn</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Select a phrase present in .syn but not in the main index.</li>
+<li>Synonym prompt appears. Press <em>Confirm</em>.</li>
+<li>Definition for the canonical phrase appears.</li>
+</ol>
+
+<h2>Sample phrase text</h2>
+<p>She would bite the bullet and carry on regardless.
+The decision came down to the wire.
+He had to face the music after jumping the gun.
+It was a blessing in disguise that turned the tide.
+They burned the midnight oil trying to reinvent the wheel.</p>

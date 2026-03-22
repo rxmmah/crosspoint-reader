@@ -1,0 +1,60 @@
+<h1>11. Fuzzy Suggestions</h1>
+
+<p>These are misspelled words. Because <em>full</em> has a .syn file, the synonym
+prompt appears first -- press <em>Confirm</em> each time. The words are not in
+.syn either, so the suggestions screen must appear next with nearby
+real headwords.</p>
+<h3>Dictionary</h3>
+<p><em>full</em></p>
+
+<h2>Test A: Suggestions list appears</h2>
+<p>Select a misspelled word. The synonym prompt appears -- press <em>Confirm</em>.
+No synonym is found. The suggestions screen must appear with nearby headwords.</p>
+<h3>Steps</h3>
+<ol>
+<li>Select applel.</li>
+<li>Synonym prompt appears. Press <em>Confirm</em>.</li>
+<li>Suggestions screen appears with nearby words.</li>
+</ol>
+<h3>Additional</h3>
+<ul>
+<li>oceam</li>
+<li>vally</li>
+<li>shdow</li>
+<li>bridqe</li>
+</ul>
+
+<h2>Test B: Select a suggestion</h2>
+<p>From the suggestions screen reached in Test A, selecting a suggested
+word must open its definition screen.</p>
+<h3>Steps</h3>
+<ol>
+<li>From suggestions screen, select any suggested word.</li>
+<li>Definition screen appears for that word.</li>
+</ol>
+
+<h2>Test C: Synonyms button after selecting a suggestion</h2>
+<p>When arriving at a definition via the suggestions screen, the <em>Confirm</em>
+button must be labelled <em>Synonyms</em> because <em>full</em> has a .syn file and this
+path sets showDoneButton to false. Pressing <em>Synonyms</em> must open the
+synonym definition or show not-found if none exists for that headword.</p>
+<h3>Steps</h3>
+<ol>
+<li>On the definition screen from Test B, verify <em>Confirm</em> is labelled <em>Synonyms</em>.</li>
+<li>Press <em>Synonyms</em>.</li>
+<li>New definition screen opens, or not-found if no synonym exists.</li>
+</ol>
+
+<h2>Test D: Navigation across a long suggestions list</h2>
+<p>The word <em>grafe</em> is close in spelling to multiple headwords in <em>full</em>
+and must produce a suggestions list long enough to require scrolling.
+Both side buttons and front buttons must move the highlight one row at a time.</p>
+<h3>Steps</h3>
+<ol>
+<li>Select <em>grafe</em>.</li>
+<li>Synonym prompt appears. Press <em>Confirm</em>.</li>
+<li>No synonym found. Suggestions screen appears with 5 or more nearby headwords.</li>
+<li>Verify: side Up and Down buttons move the highlight one row at a time.</li>
+<li>Verify: front Left and Right buttons move the highlight one row at a time.</li>
+<li>Select any suggestion. Definition screen appears. No crash.</li>
+</ol>

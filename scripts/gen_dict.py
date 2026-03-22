@@ -169,6 +169,12 @@ def write_ifo(stem: str, meta: dict, wordcount: int, idxfilesize: int,
         lines.append(f"author={meta['author']}")
     if "description" in meta:
         lines.append(f"description={meta['description']}")
+    if "website" in meta:
+        lines.append(f"website={meta['website']}")
+    if "date" in meta:
+        lines.append(f"date={meta['date']}")
+    if "lang" in meta:
+        lines.append(f"lang={meta['lang']}")
     with open(stem + ".ifo", "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 

@@ -1,8 +1,8 @@
 StarDict's dict ifo file
 version=stardict-2.4.2
 wordcount=190
-idxfilesize=2606
 synwordcount=130
+idxfilesize=2606
 bookname=English to Spanish
 sametypesequence=m
 author=CrossPoint Test Suite
