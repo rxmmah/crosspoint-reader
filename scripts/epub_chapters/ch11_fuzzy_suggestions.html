@@ -1,19 +1,19 @@
 <h1>11. Fuzzy Suggestions</h1>
 
-<p>These are misspelled words. Because <em>full</em> has a .syn file, the synonym
-prompt appears first -- press <em>Confirm</em> each time. The words are not in
+<p>These are misspelled words. Because <em>full</em> has a .syn file, the alternate
+forms prompt appears first -- press <em>Confirm</em> each time. The words are not in
 .syn either, so the suggestions screen must appear next with nearby
 real headwords.</p>
 <h3>Dictionary</h3>
 <p><em>full</em></p>
 
 <h2>Test A: Suggestions list appears</h2>
-<p>Select a misspelled word. The synonym prompt appears -- press <em>Confirm</em>.
-No synonym is found. The suggestions screen must appear with nearby headwords.</p>
+<p>Select a misspelled word. The alternate forms prompt appears -- press <em>Confirm</em>.
+No alternate form is found. The suggestions screen must appear with nearby headwords.</p>
 <h3>Steps</h3>
 <ol>
 <li>Select applel.</li>
-<li>Synonym prompt appears. Press <em>Confirm</em>.</li>
+<li>Alternate forms prompt appears. Press <em>Confirm</em>.</li>
 <li>Suggestions screen appears with nearby words.</li>
 </ol>
 <h3>Additional</h3>
@@ -33,16 +33,15 @@ word must open its definition screen.</p>
 <li>Definition screen appears for that word.</li>
 </ol>
 
-<h2>Test C: Synonyms button after selecting a suggestion</h2>
+<h2>Test C: Done button after selecting a suggestion</h2>
 <p>When arriving at a definition via the suggestions screen, the <em>Confirm</em>
-button must be labelled <em>Synonyms</em> because <em>full</em> has a .syn file and this
-path sets showDoneButton to false. Pressing <em>Synonyms</em> must open the
-synonym definition or show not-found if none exists for that headword.</p>
+button must be labelled <em>Done</em>. Pressing <em>Done</em> must exit the definition
+screen and return to the reader.</p>
 <h3>Steps</h3>
 <ol>
-<li>On the definition screen from Test B, verify <em>Confirm</em> is labelled <em>Synonyms</em>.</li>
-<li>Press <em>Synonyms</em>.</li>
-<li>New definition screen opens, or not-found if no synonym exists.</li>
+<li>On the definition screen from Test B, verify <em>Confirm</em> is labelled <em>Done</em>.</li>
+<li>Press <em>Done</em>.</li>
+<li>Reader page returns. No crash.</li>
 </ol>
 
 <h2>Test D: Navigation across a long suggestions list</h2>
@@ -52,8 +51,8 @@ Both side buttons and front buttons must move the highlight one row at a time.</
 <h3>Steps</h3>
 <ol>
 <li>Select <em>grafe</em>.</li>
-<li>Synonym prompt appears. Press <em>Confirm</em>.</li>
-<li>No synonym found. Suggestions screen appears with 5 or more nearby headwords.</li>
+<li>Alternate forms prompt appears. Press <em>Confirm</em>.</li>
+<li>No alternate form found. Suggestions screen appears with 5 or more nearby headwords.</li>
 <li>Verify: side Up and Down buttons move the highlight one row at a time.</li>
 <li>Verify: front Left and Right buttons move the highlight one row at a time.</li>
 <li>Select any suggestion. Definition screen appears. No crash.</li>

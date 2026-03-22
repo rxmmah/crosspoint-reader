@@ -407,7 +407,7 @@ bool DictPrepareActivity::generateOft(const char* srcPath, const char* oftPath, 
       }
     }
 
-    // Skip null-terminated word string. StarDict synonym files may contain long phrases;
+    // Skip null-terminated word string. StarDict .syn files may contain long phrases;
     // use a generous limit (4096) to accommodate them without allocating a stack buffer.
     bool foundNull = false;
     for (int b = 0; b < 4096; b++) {

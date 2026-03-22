@@ -7,14 +7,14 @@ Spanish translations, not English explanations.</p>
 
 <h2>Test A: Dictionary info screen</h2>
 <p>The info screen must show the full dictionary name and non-zero counts
-for both words and synonyms.</p>
+for both words and alt forms.</p>
 <h3>Steps</h3>
 <ol>
 <li>Open Settings -> Dictionary.</li>
 <li>Long-press <em>en-es</em> to open the info screen.</li>
 <li>Verify Name shows: <em>English to Spanish</em></li>
 <li>Verify Words count is non-zero.</li>
-<li>Verify Synonyms count is non-zero.</li>
+<li>Verify Alt Forms count is non-zero.</li>
 <li>Press <em>&#171; Back</em>. Select <em>en-es</em>.</li>
 </ol>
 
@@ -34,15 +34,15 @@ rendering errors.</p>
 <li>sky -- expect: <em>cielo (m)</em></li>
 </ul>
 
-<h2>Test C: Synonym resolves to Spanish translation</h2>
-<p>The words below are in the <em>en-es</em> synonym file but are not headwords.
-After direct lookup fails, the synonym prompt must appear. Confirming
+<h2>Test C: Alternate form resolves to Spanish translation</h2>
+<p>The words below are in the <em>en-es</em> .syn file but are not headwords.
+After direct lookup fails, the alternate forms prompt must appear. Confirming
 must open the Spanish translation of the canonical headword.</p>
 <h3>Steps</h3>
 <ol>
-<li>Select auto. Synonym prompt appears. Press <em>Confirm</em>.</li>
+<li>Select auto. Alternate forms prompt appears. Press <em>Confirm</em>.</li>
 <li>Definition for car appears: <em>coche (m) / carro (m)</em></li>
-<li>The result is a Spanish translation, confirming bilingual synonym resolution.</li>
+<li>The result is a Spanish translation, confirming bilingual alternate form resolution.</li>
 </ol>
 <h3>Additional</h3>
 <ul>

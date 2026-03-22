@@ -6,15 +6,15 @@ with the not-found popup.</p>
 <h3>Dictionary</h3>
 <p><em>full</em></p>
 
-<h2>Test A: Full failure sequence -- Confirm at synonym prompt</h2>
+<h2>Test A: Full failure sequence -- Confirm at alternate forms prompt</h2>
 <p>Every lookup stage must fail cleanly and end at the not-found popup.
 No crash at any step.</p>
 <h3>Steps</h3>
 <ol>
 <li>Select xzqwvb.</li>
 <li>Direct lookup fails, stems fail.</li>
-<li>Synonym prompt appears. Press <em>Confirm</em>.</li>
-<li>No synonym found.</li>
+<li>Alternate forms prompt appears. Press <em>Confirm</em>.</li>
+<li>No alternate form found.</li>
 <li>Fuzzy search finds no neighbours.</li>
 <li>Not-found popup appears: <em>Word not found</em></li>
 </ol>
@@ -25,13 +25,13 @@ No crash at any step.</p>
 <li>blorptfq</li>
 </ul>
 
-<h2>Test B: Back at synonym prompt also reaches not-found</h2>
-<p>The synonym prompt appears. Pressing <em>&#171; Back</em> must still result in the
+<h2>Test B: Back at alternate forms prompt also reaches not-found</h2>
+<p>The alternate forms prompt appears. Pressing <em>&#171; Back</em> must still result in the
 not-found popup -- the <em>&#171; Back</em> path must not skip the fuzzy search.</p>
 <h3>Steps</h3>
 <ol>
 <li>Select qfbrtm.</li>
-<li>Synonym prompt appears. Press <em>&#171; Back</em>.</li>
+<li>Alternate forms prompt appears. Press <em>&#171; Back</em>.</li>
 <li>Fuzzy search finds no neighbours.</li>
 <li>Not-found popup appears.</li>
 </ol>
