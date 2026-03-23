@@ -3,9 +3,12 @@
 #include <DictHtmlRenderer.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include <memory>
 
+#include "DictionarySuggestionsActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -17,7 +20,10 @@ void DictionaryDefinitionActivity::onEnter() {
   requestUpdate();
 }
 
-void DictionaryDefinitionActivity::onExit() { Activity::onExit(); }
+void DictionaryDefinitionActivity::onExit() {
+  controller.onExit();
+  Activity::onExit();
+}
 
 // ---------------------------------------------------------------------------
 // Layout helpers — shared setup
@@ -25,6 +31,8 @@ void DictionaryDefinitionActivity::onExit() { Activity::onExit(); }
 
 void DictionaryDefinitionActivity::wrapText() {
   layoutLines.clear();
+  isWordSelectMode = false;
+  navigator.reset();
 
   const auto orient = renderer.getOrientation();
   const auto metrics = UITheme::getInstance().getMetrics();
@@ -37,6 +45,7 @@ void DictionaryDefinitionActivity::wrapText() {
   const int sidePadding = metrics.contentSidePadding;
   leftPadding = contentX + sidePadding;
   rightPadding = (isLandscapeCcw ? hintGutterWidth : 0) + sidePadding;
+  bodyStartY = hintGutterHeight + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
 
   const int lineHeight = renderer.getLineHeight(readerFontId);
   const int topArea = hintGutterHeight + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
@@ -125,9 +134,6 @@ void DictionaryDefinitionActivity::wrapHtml() {
       appendToLine(std::string(span.text), style, spanWidth);
     } else {
       // Word-wrap within the span.
-      // Each word is placed on the current line if it fits; otherwise a new
-      // continuation line is started. A word that is wider than maxWidth on
-      // its own is still placed (can't break within a word).
       const char* p = span.text;
       while (*p) {
         bool hadSpace = false;
@@ -220,10 +226,162 @@ void DictionaryDefinitionActivity::wrapPlain() {
 }
 
 // ---------------------------------------------------------------------------
+// Word-select: extract words from the currently visible page
+// ---------------------------------------------------------------------------
+
+void DictionaryDefinitionActivity::extractWordsFromLayout() {
+  const int lineHeight = renderer.getLineHeight(readerFontId);
+  const int indentStep = renderer.getTextWidth(readerFontId, "   ");
+  const int spaceWidth = renderer.getTextWidth(readerFontId, " ");
+
+  std::vector<WordSelectNavigator::WordInfo> words;
+  std::vector<WordSelectNavigator::Row> rows;
+
+  const int startLineIdx = currentPage * linesPerPage;
+  for (int i = 0; i < linesPerPage && (startLineIdx + i) < static_cast<int>(layoutLines.size()); i++) {
+    const LayoutLine& line = layoutLines[startLineIdx + i];
+    const int16_t lineY = static_cast<int16_t>(bodyStartY + i * lineHeight);
+    int x = leftPadding + line.indentLevel * indentStep;
+
+    if (line.isListItem) {
+      x += renderer.getTextWidth(readerFontId, "- ");
+    }
+
+    for (const auto& seg : line.segments) {
+      const char* p = seg.text.c_str();
+      while (*p) {
+        while (*p == ' ') {
+          x += spaceWidth;
+          ++p;
+        }
+        if (!*p) break;
+
+        const char* tokStart = p;
+        while (*p && *p != ' ') ++p;
+        std::string tok(tokStart, p - tokStart);
+
+        const int tokWidth = renderer.getTextWidth(readerFontId, tok.c_str(), seg.style);
+        std::string cleaned = Dictionary::cleanWord(tok);
+        if (!cleaned.empty()) {
+          words.push_back({tok, static_cast<int16_t>(x), lineY, static_cast<int16_t>(tokWidth), 0});
+          words.back().lookupText = cleaned;
+        }
+        x += tokWidth;
+      }
+    }
+  }
+
+  // Organise into rows by Y coordinate (each LayoutLine maps to one row)
+  if (!words.empty()) {
+    int16_t currentY = words[0].screenY;
+    rows.push_back({currentY, {}});
+    for (size_t i = 0; i < words.size(); i++) {
+      if (words[i].screenY != currentY) {
+        currentY = words[i].screenY;
+        rows.push_back({currentY, {}});
+      }
+      words[i].row = static_cast<int16_t>(rows.size() - 1);
+      rows.back().wordIndices.push_back(static_cast<int>(i));
+    }
+  }
+
+  navigator.load(std::move(words), std::move(rows));
+}
+
+// ---------------------------------------------------------------------------
+// Background lookup (for definition word-select)
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Not-found helper: findSimilar → suggestions activity, or controller.setNotFound()
+// On suggestion selected: re-trigger lookup via controller (in-place replace on FoundDefinition).
+// ---------------------------------------------------------------------------
+
+void DictionaryDefinitionActivity::handleNotFound(const std::string& word) {
+  auto similar = Dictionary::findSimilar(word, 6);
+  if (!similar.empty()) {
+    startActivityForResult(
+        std::make_unique<DictionarySuggestionsActivity>(renderer, mappedInput, std::move(similar), readerFontId),
+        [this](const ActivityResult& result) {
+          if (result.isCancelled) {
+            controller.setNotFound();
+            return;
+          }
+          const auto& wr = std::get<WordResult>(result.data);
+          controller.startLookup(wr.word);  // in-place replace on FoundDefinition
+        });
+    return;
+  }
+  controller.setNotFound();
+}
+
+// ---------------------------------------------------------------------------
 // Input loop
 // ---------------------------------------------------------------------------
 
 void DictionaryDefinitionActivity::loop() {
+  // --- Controller active (LookingUp / AltFormPrompt / NotFound) ---
+  if (controller.isActive()) {
+    switch (controller.handleInput()) {
+      case DictionaryLookupController::LookupEvent::FoundDefinition:
+        headword = controller.getFoundWord();
+        definition = controller.getFoundDefinition();
+        wrapText();
+        currentPage = 0;
+        isWordSelectMode = false;
+        requestUpdate();
+        break;
+      case DictionaryLookupController::LookupEvent::LookupFailed:
+        handleNotFound(controller.getLookupWord());
+        break;
+      case DictionaryLookupController::LookupEvent::NotFoundDismissedBack:
+        requestUpdate();
+        break;
+      case DictionaryLookupController::LookupEvent::NotFoundDismissedDone:
+        setResult(ActivityResult{});
+        finish();
+        break;
+      case DictionaryLookupController::LookupEvent::Cancelled:
+        isWordSelectMode = false;
+        navigator.reset();
+        requestUpdate();
+        break;
+      default:
+        break;
+    }
+    return;
+  }
+
+  // --- Word-select mode ---
+  if (isWordSelectMode) {
+    if (navigator.handleNavigation(mappedInput, renderer)) {
+      requestUpdate();
+    }
+
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      const auto* sel = navigator.getSelected();
+      if (!sel) return;
+      if (sel->lookupText.empty()) return;
+      controller.startLookup(sel->lookupText);
+      return;
+    }
+
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+        // Long press — Done: exit all the way to reader
+        setResult(ActivityResult{});
+        finish();
+      } else {
+        // Short press — exit word-select, return to definition view
+        isWordSelectMode = false;
+        navigator.reset();
+        requestUpdate();
+      }
+    }
+    return;
+  }
+
+  // --- View mode ---
   const bool prevPage = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
                         mappedInput.wasReleased(MappedInputManager::Button::Left);
   const bool nextPage = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
@@ -239,16 +397,30 @@ void DictionaryDefinitionActivity::loop() {
     requestUpdate();
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && showDoneButton) {
-    setResult(ActivityResult{});
-    finish();
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (showLookupButton) {
+      extractWordsFromLayout();
+      if (!navigator.isEmpty()) {
+        isWordSelectMode = true;
+        requestUpdate();
+      }
+    } else {
+      ActivityResult r;
+      r.isCancelled = true;
+      setResult(std::move(r));
+      finish();
+    }
     return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    ActivityResult r;
-    r.isCancelled = true;
-    setResult(std::move(r));
+    if (showLookupButton && mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+      setResult(ActivityResult{});  // Done: isCancelled=false
+    } else {
+      ActivityResult r;
+      r.isCancelled = true;
+      setResult(std::move(r));
+    }
     finish();
     return;
   }
@@ -260,6 +432,7 @@ void DictionaryDefinitionActivity::loop() {
 
 void DictionaryDefinitionActivity::render(RenderLock&&) {
   renderer.clearScreen();
+  if (controller.render()) return;
 
   const auto metrics = UITheme::getInstance().getMetrics();
   const int lineHeight = renderer.getLineHeight(readerFontId);
@@ -270,7 +443,6 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
                  Rect{contentX, hintGutterHeight + metrics.topPadding, renderer.getScreenWidth() - hintGutterWidth,
                       metrics.headerHeight},
                  headword.c_str());
-  const int bodyStartY = hintGutterHeight + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
 
   // Body: draw layout lines for the current page
   const int startLine = currentPage * linesPerPage;
@@ -290,7 +462,20 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     }
   }
 
-  // Pagination indicator
+  // Word-select mode: overlay the highlighted word
+  if (isWordSelectMode) {
+    if (const auto* sel = navigator.getSelected()) {
+      renderer.fillRect(sel->screenX - 1, sel->screenY - 1, sel->width + 2, lineHeight + 2, true);
+      renderer.drawText(readerFontId, sel->screenX, sel->screenY, sel->text.c_str(), false);
+    }
+    // Empty button hints in word-select mode (same convention as EPUB word-select)
+    const auto labels = mappedInput.mapLabels("", "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    return;
+  }
+
+  // View mode: pagination indicator and button hints
   if (totalPages > 1) {
     std::string pageInfo = std::to_string(currentPage + 1) + "/" + std::to_string(totalPages);
     int textWidth = renderer.getTextWidth(SMALL_FONT_ID, pageInfo.c_str());
@@ -299,8 +484,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
                       pageInfo.c_str());
   }
 
-  // Button hints
-  const char* btn2 = showDoneButton ? tr(STR_DONE) : "";
+  const char* btn2 = showLookupButton ? tr(STR_LOOKUP_SHORT) : "";
   const char* btn3 = totalPages > 1 ? tr(STR_PREV_NEXT) : "";
   const char* btn4 = totalPages > 1 ? tr(STR_NEXT_PREV) : "";
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), btn2, btn3, btn4);

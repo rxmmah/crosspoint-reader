@@ -6,7 +6,6 @@
 #include <freertos/task.h>
 
 #include <algorithm>
-#include <climits>
 
 #include "DictionaryDefinitionActivity.h"
 #include "DictionarySuggestionsActivity.h"
@@ -17,24 +16,21 @@
 
 void DictionaryWordSelectActivity::onEnter() {
   Activity::onEnter();
-  extractWords();
-  mergeHyphenatedWords();
-  if (!rows.empty()) {
-    currentRow = static_cast<int>(rows.size()) / 2;
-    currentWordInRow = 0;
-  }
+  std::vector<WordSelectNavigator::WordInfo> words;
+  std::vector<WordSelectNavigator::Row> rows;
+  extractWords(words, rows);
+  mergeHyphenatedWords(words, rows);
+  navigator.load(std::move(words), std::move(rows));
   requestUpdate();
 }
 
 void DictionaryWordSelectActivity::onExit() {
-  if (lookupTaskHandle != nullptr) {
-    vTaskDelete(lookupTaskHandle);
-    lookupTaskHandle = nullptr;
-  }
+  controller.onExit();
   Activity::onExit();
 }
 
-void DictionaryWordSelectActivity::extractWords() {
+void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator::WordInfo>& words,
+                                                std::vector<WordSelectNavigator::Row>& rows) {
   words.clear();
   rows.clear();
 
@@ -119,7 +115,8 @@ void DictionaryWordSelectActivity::extractWords() {
   }
 }
 
-void DictionaryWordSelectActivity::mergeHyphenatedWords() {
+void DictionaryWordSelectActivity::mergeHyphenatedWords(std::vector<WordSelectNavigator::WordInfo>& words,
+                                                        std::vector<WordSelectNavigator::Row>& rows) {
   for (size_t r = 0; r + 1 < rows.size(); r++) {
     if (rows[r].wordIndices.empty() || rows[r + 1].wordIndices.empty()) continue;
 
@@ -178,7 +175,10 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords() {
     }
   }
 
-  rows.erase(std::remove_if(rows.begin(), rows.end(), [](const Row& r) { return r.wordIndices.empty(); }), rows.end());
+  rows.erase(
+      std::remove_if(rows.begin(), rows.end(),
+                     [](const WordSelectNavigator::Row& r) { return r.wordIndices.empty(); }),
+      rows.end());
 }
 
 // Shared helper: run findSimilar for `word` and launch suggestions activity, or show "not found" popup.
@@ -189,7 +189,7 @@ void DictionaryWordSelectActivity::handleNotFound(const std::string& word) {
         std::make_unique<DictionarySuggestionsActivity>(renderer, mappedInput, std::move(similar), fontId),
         [this](const ActivityResult& result) {
           if (result.isCancelled) {
-            requestUpdate();
+            controller.setNotFound();
             return;
           }
           const auto& wr = std::get<WordResult>(result.data);
@@ -206,81 +206,50 @@ void DictionaryWordSelectActivity::handleNotFound(const std::string& word) {
                   }
                 });
           } else {
-            isShowingNotFound = true;
-            requestUpdate();
+            controller.setNotFound();
           }
         });
     return;
   }
-  isShowingNotFound = true;
-  requestUpdate();
+  controller.setNotFound();
 }
 
 void DictionaryWordSelectActivity::loop() {
-  // Handle in-progress background lookup task
-  if (isLookingUp) {
-    if (lookupDone) {
-      isLookingUp = false;
-      lookupTaskHandle = nullptr;
-
-      if (lookupCancelled) {
+  if (controller.isActive()) {
+    switch (controller.handleInput()) {
+      case DictionaryLookupController::LookupEvent::FoundDefinition:
+        startActivityForResult(
+            std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, controller.getFoundWord(),
+                                                          controller.getFoundDefinition(), fontId, true),
+            [this](const ActivityResult& result) {
+              if (!result.isCancelled) {
+                setResult(ActivityResult{});
+                finish();
+              } else {
+                requestUpdate();
+              }
+            });
+        break;
+      case DictionaryLookupController::LookupEvent::LookupFailed:
+        handleNotFound(controller.getLookupWord());
+        break;
+      case DictionaryLookupController::LookupEvent::NotFoundDismissedBack:
         requestUpdate();
-        return;
-      }
-
-      if (!lookupDefinition.empty()) {
-        startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, lookupWord,
-                                                                              lookupDefinition, fontId, true),
-                               [this](const ActivityResult& result) {
-                                 if (!result.isCancelled) {
-                                   setResult(ActivityResult{});
-                                   finish();
-                                 } else {
-                                   requestUpdate();
-                                 }
-                               });
-        return;
-      }
-
-      // Try stem variants
-      auto stems = Dictionary::getStemVariants(lookupWord);
-      for (const auto& stem : stems) {
-        std::string stemDef = Dictionary::lookup(stem);
-        if (!stemDef.empty()) {
-          startActivityForResult(
-              std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, stem, stemDef, fontId, true),
-              [this](const ActivityResult& result) {
-                if (!result.isCancelled) {
-                  setResult(ActivityResult{});
-                  finish();
-                } else {
-                  requestUpdate();
-                }
-              });
-          return;
-        }
-      }
-
-      if (Dictionary::hasAltForms()) {
-        altFormSearchWord = lookupWord;
-        isAskingAltFormSearch = true;
+        break;
+      case DictionaryLookupController::LookupEvent::NotFoundDismissedDone:
+        setResult(ActivityResult{});
+        finish();
+        break;
+      case DictionaryLookupController::LookupEvent::Cancelled:
         requestUpdate();
-        return;
-      }
-
-      handleNotFound(lookupWord);
-      return;
-    }
-
-    // Still running — check for cancel
-    if (!lookupCancelRequested && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      lookupCancelRequested = true;
-      requestUpdate();
+        break;
+      default:
+        break;
     }
     return;
   }
 
-  if (words.empty()) {
+  if (navigator.isEmpty()) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       ActivityResult r;
       r.isCancelled = true;
@@ -290,144 +259,14 @@ void DictionaryWordSelectActivity::loop() {
     return;
   }
 
-  // "Not found" popup — persists until Done or Back is pressed
-  if (isShowingNotFound) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      isShowingNotFound = false;
-      setResult(ActivityResult{});
-      finish();
-      return;
-    }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      isShowingNotFound = false;
-      requestUpdate();
-      return;
-    }
-    return;
-  }
-
-  // "Search alternate forms?" prompt shown after all direct lookups fail
-  if (isAskingAltFormSearch) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      isAskingAltFormSearch = false;
-      std::string canonical = Dictionary::resolveAltForm(altFormSearchWord);
-      if (!canonical.empty()) {
-        std::string synDef = Dictionary::lookup(canonical);
-        if (!synDef.empty()) {
-          startActivityForResult(
-              std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, canonical, synDef, fontId, true),
-              [this](const ActivityResult& result) {
-                if (!result.isCancelled) {
-                  setResult(ActivityResult{});
-                  finish();
-                } else {
-                  requestUpdate();
-                }
-              });
-          return;
-        }
-      }
-      // Alt form not found — fall through to findSimilar
-      handleNotFound(altFormSearchWord);
-      return;
-    }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      // Back cancels the alt-form search and returns to word-select mode.
-      isAskingAltFormSearch = false;
-      requestUpdate();
-      return;
-    }
-    return;  // Consume all other input while on the alt-form prompt
-  }
-
-  bool changed = false;
-  const auto orient = renderer.getOrientation();
-  const bool isLandscapeCw = orient == GfxRenderer::Orientation::LandscapeClockwise;
-  const bool isLandscapeCcw = orient == GfxRenderer::Orientation::LandscapeCounterClockwise;
-  const bool isInverted = orient == GfxRenderer::Orientation::PortraitInverted;
-  const bool landscape = isLandscapeCw || isLandscapeCcw;
-
-  bool rowPrevPressed, rowNextPressed, wordPrevPressed, wordNextPressed;
-
-  if (isLandscapeCw) {
-    rowPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Left);
-    rowNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Right);
-    wordPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Down);
-    wordNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Up);
-  } else if (landscape) {
-    rowPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Right);
-    rowNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Left);
-    wordPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Up);
-    wordNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Down);
-  } else if (isInverted) {
-    rowPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Down);
-    rowNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Up);
-    wordPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Right);
-    wordNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Left);
-  } else {
-    rowPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Up);
-    rowNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Down);
-    wordPrevPressed = mappedInput.wasReleased(MappedInputManager::Button::Left);
-    wordNextPressed = mappedInput.wasReleased(MappedInputManager::Button::Right);
-  }
-
-  const int rowCount = static_cast<int>(rows.size());
-
-  auto findClosestWord = [&](int targetRow) {
-    int wordIdx = rows[currentRow].wordIndices[currentWordInRow];
-    int currentCenterX = words[wordIdx].screenX + words[wordIdx].width / 2;
-    int bestMatch = 0;
-    int bestDist = INT_MAX;
-    for (int i = 0; i < static_cast<int>(rows[targetRow].wordIndices.size()); i++) {
-      int idx = rows[targetRow].wordIndices[i];
-      int centerX = words[idx].screenX + words[idx].width / 2;
-      int dist = std::abs(centerX - currentCenterX);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestMatch = i;
-      }
-    }
-    return bestMatch;
-  };
-
-  if (rowPrevPressed) {
-    int targetRow = (currentRow > 0) ? currentRow - 1 : rowCount - 1;
-    currentWordInRow = findClosestWord(targetRow);
-    currentRow = targetRow;
-    changed = true;
-  }
-
-  if (rowNextPressed) {
-    int targetRow = (currentRow < rowCount - 1) ? currentRow + 1 : 0;
-    currentWordInRow = findClosestWord(targetRow);
-    currentRow = targetRow;
-    changed = true;
-  }
-
-  if (wordPrevPressed) {
-    if (currentWordInRow > 0) {
-      currentWordInRow--;
-    } else if (rowCount > 1) {
-      currentRow = (currentRow > 0) ? currentRow - 1 : rowCount - 1;
-      currentWordInRow = static_cast<int>(rows[currentRow].wordIndices.size()) - 1;
-    }
-    changed = true;
-  }
-
-  if (wordNextPressed) {
-    if (currentWordInRow < static_cast<int>(rows[currentRow].wordIndices.size()) - 1) {
-      currentWordInRow++;
-    } else if (rowCount > 1) {
-      currentRow = (currentRow < rowCount - 1) ? currentRow + 1 : 0;
-      currentWordInRow = 0;
-    }
-    changed = true;
+  if (navigator.handleNavigation(mappedInput, renderer)) {
+    requestUpdate();
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    int wordIdx = rows[currentRow].wordIndices[currentWordInRow];
-    const std::string& rawWord = words[wordIdx].lookupText;
-    std::string cleaned = Dictionary::cleanWord(rawWord);
+    const auto* sel = navigator.getSelected();
+    if (!sel) return;
+    std::string cleaned = Dictionary::cleanWord(sel->lookupText);
 
     if (cleaned.empty()) {
       GUI.drawPopup(renderer, tr(STR_DICT_NO_WORD));
@@ -437,16 +276,7 @@ void DictionaryWordSelectActivity::loop() {
       return;
     }
 
-    // Show "Looking up..." popup once, then run lookup on a background task.
-    lookupWord = cleaned;
-    lookupDefinition.clear();
-    lookupProgress = 0;
-    lookupDone = false;
-    lookupCancelled = false;
-    lookupCancelRequested = false;
-    isLookingUp = true;
-    requestUpdateAndWait();
-    xTaskCreate(lookupTaskEntry, "DictLookup", 4096, this, 1, &lookupTaskHandle);
+    controller.startLookup(cleaned);
     return;
   }
 
@@ -457,90 +287,24 @@ void DictionaryWordSelectActivity::loop() {
     finish();
     return;
   }
-
-  if (changed) {
-    requestUpdate();
-  }
-}
-
-void DictionaryWordSelectActivity::lookupTaskEntry(void* param) {
-  DictionaryWordSelectActivity* self = static_cast<DictionaryWordSelectActivity*>(param);
-  self->runLookup();
-  self->lookupTaskHandle = nullptr;
-  vTaskDelete(nullptr);
-}
-
-void DictionaryWordSelectActivity::runLookup() {
-  lookupDefinition = Dictionary::lookup(
-      lookupWord,
-      [this](int percent) {
-        lookupProgress = percent;
-        requestUpdate(true);
-      },
-      [this]() -> bool { return lookupCancelRequested; });
-
-  lookupCancelled = lookupCancelRequested;
-  lookupDone = true;
-  requestUpdate(true);
 }
 
 void DictionaryWordSelectActivity::render(RenderLock&&) {
   renderer.clearScreen();
-
-  // "Search alternate forms?" prompt
-  if (isAskingAltFormSearch) {
-    const int pageWidth = renderer.getScreenWidth();
-    const auto& metrics = UITheme::getInstance().getMetrics();
-    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                   tr(STR_DICT_SEARCH_ALT_FORMS));
-    const int y =
-        metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + renderer.getLineHeight(UI_10_FONT_ID);
-    renderer.drawCenteredText(UI_10_FONT_ID, y, altFormSearchWord.c_str());
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_CONFIRM), "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-    return;
-  }
-
-  // "Not found" popup — show until dismissed
-  if (isShowingNotFound) {
-    GUI.drawPopup(renderer, tr(STR_DICT_NOT_FOUND));
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DONE), "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-    return;
-  }
-
-  // If looking up, show popup
-  if (isLookingUp) {
-    Rect popupLayout = GUI.drawPopup(renderer, tr(STR_LOOKING_UP));
-    if (lookupProgress > 0) {
-      GUI.fillPopupProgress(renderer, popupLayout, lookupProgress);
-    }
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-    return;
-  }
+  if (controller.render()) return;
 
   // Render the page content
   page->render(renderer, fontId, marginLeft, marginTop);
 
-  if (!words.empty() && currentRow < static_cast<int>(rows.size())) {
-    int wordIdx = rows[currentRow].wordIndices[currentWordInRow];
-    const auto& w = words[wordIdx];
-
+  if (const auto* w = navigator.getSelected()) {
     const int lineHeight = renderer.getLineHeight(fontId);
-    renderer.fillRect(w.screenX - 1, w.screenY - 1, w.width + 2, lineHeight + 2, true);
-    renderer.drawText(fontId, w.screenX, w.screenY, w.text.c_str(), false);
+    renderer.fillRect(w->screenX - 1, w->screenY - 1, w->width + 2, lineHeight + 2, true);
+    renderer.drawText(fontId, w->screenX, w->screenY, w->text.c_str(), false);
 
     // Highlight the other half of a hyphenated word
-    int otherIdx = (w.continuationOf >= 0) ? w.continuationOf : -1;
-    if (otherIdx < 0 && w.continuationIndex >= 0 && w.continuationIndex != wordIdx) {
-      otherIdx = w.continuationIndex;
-    }
-    if (otherIdx >= 0) {
-      const auto& other = words[otherIdx];
-      renderer.fillRect(other.screenX - 1, other.screenY - 1, other.width + 2, lineHeight + 2, true);
-      renderer.drawText(fontId, other.screenX, other.screenY, other.text.c_str(), false);
+    if (const auto* other = navigator.getContinuation()) {
+      renderer.fillRect(other->screenX - 1, other->screenY - 1, other->width + 2, lineHeight + 2, true);
+      renderer.drawText(fontId, other->screenX, other->screenY, other->text.c_str(), false);
     }
   }
 
