@@ -1,6 +1,7 @@
 StarDict's dict ifo file
 version=2.4.2
-wordcount=25
-idxfilesize=711
-bookname=Phrase Test Dictionary
+wordcount=34
+synwordcount=13
+idxfilesize=1479
+bookname=Phrase Sampler
 sametypesequence=m
