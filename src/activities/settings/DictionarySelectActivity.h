@@ -20,9 +20,12 @@ class DictionarySelectActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
+  // Active SD card root directory for dictionaries (resolved in scanDictionaries()).
+  std::string dictRoot;
+
   // Discovered dictionary folder names and file stems (parallel vectors, excluding "None").
   // e.g. dictFolders[i] = "dict-en-en", dictStems[i] = "dict-data"
-  // folderForIndex() combines them into the full base path used for file access.
+  // folderForIndex() combines them with dictRoot into the full base path used for file access.
   std::vector<std::string> dictFolders;
   std::vector<std::string> dictStems;
 
@@ -52,7 +55,7 @@ class DictionarySelectActivity final : public Activity {
 
   ButtonNavigator buttonNavigator;
 
-  // Scans /dictionary/ on the SD card and populates dictFolders.
+  // Scans the first available dictionary root directory on the SD card and populates dictFolders.
   void scanDictionaries();
 
   // Returns the folder path for a given list index (0 = None → empty string).

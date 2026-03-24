@@ -2,7 +2,7 @@
 
 ## Setting Up a Dictionary
 
-Place your dictionary folder(s) in the `/dictionary/` directory on the SD card, then follow these steps.
+Place your dictionary folder(s) in one of the following directories on the SD card (checked in this order): `/.dictionaries/` or `/dictionaries/`. Then follow these steps.
 
 1. Open **Settings → Dictionary**.
 2. Select a dictionary from the list.

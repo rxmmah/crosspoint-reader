@@ -16,8 +16,12 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-// SD card root directory for dictionaries.
-static constexpr const char* DICT_ROOT = "/dictionary";
+// Candidate SD card root directories for dictionaries, checked in priority order.
+// The first directory found on the SD card is used; the rest are ignored.
+static constexpr const char* DICT_ROOT_CANDIDATES[] = {
+    "/.dictionaries",
+    "/dictionaries",
+};
 
 // Long press threshold for viewing dictionary metadata.
 static constexpr unsigned long VIEW_INFO_MS = 1000;
@@ -75,7 +79,7 @@ void DictionarySelectActivity::onEnter() {
     }
 
     // Build augmented "Use Global" label showing the active global dictionary name.
-    // Path format: /dictionary/<folder>/<stem> — extract <folder>.
+    // Path format: <dictRoot>/<folder>/<stem> — extract <folder>.
     const char* globalPath = SETTINGS.dictionaryPath;
     std::string globalFolderName;
     if (globalPath[0] == '\0') {
@@ -109,10 +113,25 @@ void DictionarySelectActivity::onExit() { Activity::onExit(); }
 void DictionarySelectActivity::scanDictionaries() {
   dictFolders.clear();
   dictStems.clear();
+  dictRoot.clear();
 
-  auto root = Storage.open(DICT_ROOT);
+  for (const auto* candidate : DICT_ROOT_CANDIDATES) {
+    auto dir = Storage.open(candidate);
+    if (dir && dir.isDirectory()) {
+      dictRoot = candidate;
+      dir.close();
+      break;
+    }
+    if (dir) dir.close();
+  }
+
+  if (dictRoot.empty()) {
+    LOG_DBG("DSEL", "No dictionary directory found on SD card");
+    return;
+  }
+
+  auto root = Storage.open(dictRoot.c_str());
   if (!root || !root.isDirectory()) {
-    LOG_DBG("DSEL", "No /dictionary directory on SD card");
     if (root) root.close();
     return;
   }
@@ -132,7 +151,7 @@ void DictionarySelectActivity::scanDictionaries() {
     // Scan the subdirectory for any .idx file — use the first one found.
     // .ifo is not required; discovery is keyed on .idx presence only.
     char subPath[520];
-    snprintf(subPath, sizeof(subPath), "%s/%s", DICT_ROOT, name);
+    snprintf(subPath, sizeof(subPath), "%s/%s", dictRoot.c_str(), name);
     entry.close();
 
     auto subDir = Storage.open(subPath);
@@ -210,10 +229,10 @@ void DictionarySelectActivity::scanDictionaries() {
 
 std::string DictionarySelectActivity::folderForIndex(int index) const {
   if (index <= 0 || index > static_cast<int>(dictFolders.size())) return "";
-  // Returns the full base path: /dictionary/<folder>/<stem>
+  // Returns the full base path: <dictRoot>/<folder>/<stem>
   // All file access appends an extension to this (e.g. basePath + ".idx").
   char fullPath[520];
-  snprintf(fullPath, sizeof(fullPath), "%s/%s/%s", DICT_ROOT, dictFolders[index - 1].c_str(),
+  snprintf(fullPath, sizeof(fullPath), "%s/%s/%s", dictRoot.c_str(), dictFolders[index - 1].c_str(),
            dictStems[index - 1].c_str());
   return std::string(fullPath);
 }
