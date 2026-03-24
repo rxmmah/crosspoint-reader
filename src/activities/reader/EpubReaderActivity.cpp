@@ -16,6 +16,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "DictionaryWordSelectActivity.h"
+#include "LookedUpWordsActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
@@ -482,6 +483,13 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                  renderer, mappedInput, std::move(pageForLookup), readerFontId, orientedMarginLeft,
                                  orientedMarginTop, bookCachePath, nextPageFirstWord),
                              [this](const ActivityResult&) { requestUpdate(); });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::LOOKUP_HISTORY: {
+      startActivityForResult(
+          std::make_unique<LookedUpWordsActivity>(renderer, mappedInput, epub->getCachePath(),
+                                                  SETTINGS.getReaderFontId()),
+          [this](const ActivityResult&) { requestUpdate(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SET_BOOK_DICTIONARY: {

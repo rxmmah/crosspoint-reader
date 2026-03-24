@@ -24,13 +24,14 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes,
                                                                                      bool hasDictionary) {
   std::vector<MenuItem> items;
-  items.reserve(12);
+  items.reserve(13);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   if (hasFootnotes) {
     items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
   }
   if (hasDictionary) {
     items.push_back({MenuAction::LOOKUP, StrId::STR_LOOKUP});
+    items.push_back({MenuAction::LOOKUP_HISTORY, StrId::STR_LOOKUP_HISTORY});
   }
   items.push_back({MenuAction::SET_BOOK_DICTIONARY, StrId::STR_BOOK_DICTIONARY});
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});

@@ -13,6 +13,17 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
+#include "util/LookupHistory.h"
+
+static LookupHistory::Status toHistStatus(DictionaryLookupController::FoundStatus fs) {
+  switch (fs) {
+    case DictionaryLookupController::FoundStatus::Direct:     return LookupHistory::Status::Direct;
+    case DictionaryLookupController::FoundStatus::Stem:       return LookupHistory::Status::Stem;
+    case DictionaryLookupController::FoundStatus::AltForm:    return LookupHistory::Status::AltForm;
+    case DictionaryLookupController::FoundStatus::Suggestion: return LookupHistory::Status::Suggestion;
+    default:                                                  return LookupHistory::Status::NotFound;
+  }
+}
 
 void DictionaryWordSelectActivity::onEnter() {
   Activity::onEnter();
@@ -195,8 +206,10 @@ void DictionaryWordSelectActivity::handleNotFound(const std::string& word) {
           const auto& wr = std::get<WordResult>(result.data);
           std::string def = Dictionary::lookup(wr.word);
           if (!def.empty()) {
+            int chainStart = LookupHistory::addWord(cachePath, wr.word, LookupHistory::Status::Suggestion);
             startActivityForResult(
-                std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, wr.word, def, fontId, true),
+                std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, wr.word, def, fontId, true,
+                                                              cachePath, chainStart),
                 [this](const ActivityResult& r) {
                   if (!r.isCancelled) {
                     setResult(ActivityResult{});
@@ -211,6 +224,7 @@ void DictionaryWordSelectActivity::handleNotFound(const std::string& word) {
         });
     return;
   }
+  LookupHistory::addWord(cachePath, word, LookupHistory::Status::NotFound);
   controller.setNotFound();
 }
 
@@ -230,10 +244,13 @@ std::string DictionaryWordSelectActivity::buildPhraseFromRange(int fromIdx, int 
 void DictionaryWordSelectActivity::loop() {
   if (controller.isActive()) {
     switch (controller.handleInput()) {
-      case DictionaryLookupController::LookupEvent::FoundDefinition:
+      case DictionaryLookupController::LookupEvent::FoundDefinition: {
+        int chainStart = LookupHistory::addWord(cachePath, controller.getLookupWord(),
+                                               toHistStatus(controller.getFoundStatus()));
         startActivityForResult(
             std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, controller.getFoundWord(),
-                                                          controller.getFoundDefinition(), fontId, true),
+                                                          controller.getFoundDefinition(), fontId, true,
+                                                          cachePath, chainStart),
             [this](const ActivityResult& result) {
               if (!result.isCancelled) {
                 setResult(ActivityResult{});
@@ -243,6 +260,7 @@ void DictionaryWordSelectActivity::loop() {
               }
             });
         break;
+      }
       case DictionaryLookupController::LookupEvent::LookupFailed:
         handleNotFound(controller.getLookupWord());
         break;

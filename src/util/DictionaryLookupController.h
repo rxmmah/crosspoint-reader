@@ -25,10 +25,16 @@ class DictionaryLookupController {
     Cancelled
   };
 
+  // How the word was ultimately resolved when FoundDefinition fires.
+  enum class FoundStatus { Direct, Stem, AltForm, Suggestion };
+
   DictionaryLookupController(GfxRenderer& renderer, MappedInputManager& mappedInput, Activity& owner);
 
   // Start a lookup.  Transitions Idle → LookingUp, spawns background task.
   void startLookup(const std::string& word);
+
+  // Like startLookup but marks the result as Suggestion (word came from fuzzy suggestions list).
+  void startLookupAsSuggestion(const std::string& word);
 
   // Called by the activity after the suggestions path has been exhausted.
   // Transitions to NotFound state.
@@ -53,6 +59,7 @@ class DictionaryLookupController {
   const std::string& getLookupWord() const { return lookupWord; }
   const std::string& getFoundWord() const { return foundWord; }
   const std::string& getFoundDefinition() const { return foundDefinition; }
+  FoundStatus getFoundStatus() const { return foundStatus; }
 
  private:
   GfxRenderer& renderer;
@@ -60,6 +67,8 @@ class DictionaryLookupController {
   Activity& owner;
 
   LookupState state = LookupState::Idle;
+  FoundStatus foundStatus = FoundStatus::Direct;
+  bool nextIsSuggestion = false;
 
   std::string lookupWord;
   std::string foundWord;

@@ -1,0 +1,35 @@
+<h1>19. Lookup History</h1>
+<p>This chapter validates per-book lookup history (Phase 14): recording, display, re-lookup, deletion, chain back-navigation, and the history cap.</p>
+
+<h2>Test A — Empty state</h2>
+<p>Open Lookup History from the reader menu before any lookups have been performed. Expected: the history screen opens and shows the empty-state message ("No words looked up yet"). Back returns to the reader.</p>
+
+<h2>Test B — Direct lookup recorded (√)</h2>
+<p>Look up the word <b>apple</b> (direct hit). Return to the reader, then open Lookup History. Expected: "apple" appears at the top of the list with the √ glyph.</p>
+
+<h2>Test C — Not-found lookup recorded (×)</h2>
+<p>Look up the word <b>zxqvmw</b> (no match, no suggestions). Open Lookup History. Expected: "zxqvmw" appears with the × glyph.</p>
+
+<h2>Test D — Stem lookup recorded (~)</h2>
+<p>Look up a conjugated or plural form not present as a headword — e.g. <b>apples</b> (resolved via stemming to "apple"). Open Lookup History. Expected: the searched word appears with the ~ glyph.</p>
+
+<h2>Test E — Suggestion lookup recorded (?)</h2>
+<p>Look up a misspelling — e.g. <b>aplpe</b> — and select a suggestion from the list. Open Lookup History. Expected: the selected suggestion word appears with the ? glyph.</p>
+
+<h2>Test F — Re-lookup from history</h2>
+<p>Select a word from the history list and press Confirm (short press). Expected: the definition screen opens. Pressing Back from the definition returns to the history screen (not the reader).</p>
+
+<h2>Test G — Delete: confirm</h2>
+<p>Long-press Confirm on a history entry to enter delete-confirm mode. Expected: a popup appears showing the entry word and Delete/Cancel button hints. Press Confirm (Delete). Expected: the entry is removed from the list.</p>
+
+<h2>Test H — Delete: cancel</h2>
+<p>Long-press Confirm on a history entry to enter delete-confirm mode. Press Back (Cancel). Expected: the entry is retained; the list returns to normal view.</p>
+
+<h2>Test I — Chain back-navigation</h2>
+<p>From the EPUB reader, look up word A. From A's definition screen, enter word-select mode and look up word B. Expected: B's definition appears. Press Back from B. Expected: A's definition re-appears (chain back). Press Back again. Expected: returns to word-select or reader (not B's definition). Confirm the history file contains both A and B entries.</p>
+
+<h2>Test J — History cap (eviction)</h2>
+<p>Set the History Limit setting to 25. Perform 26 distinct lookups. Open Lookup History. Expected: only 25 entries are shown; the oldest (first) lookup has been evicted.</p>
+
+<h2>Test K — Done exits to reader</h2>
+<p>While viewing a chained definition (look up A, then B from A's definition), long-press Back (Done). Expected: exits directly to the EPUB reader, bypassing the history screen and word-select mode.</p>

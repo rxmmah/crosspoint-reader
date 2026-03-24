@@ -23,6 +23,7 @@ class EpubReaderMenuActivity final : public Activity {
     SYNC,
     DELETE_CACHE,
     LOOKUP,
+    LOOKUP_HISTORY,
     SET_BOOK_DICTIONARY
   };
 

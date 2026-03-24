@@ -13,6 +13,17 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
+#include "util/LookupHistory.h"
+
+static LookupHistory::Status toHistStatus(DictionaryLookupController::FoundStatus fs) {
+  switch (fs) {
+    case DictionaryLookupController::FoundStatus::Direct:     return LookupHistory::Status::Direct;
+    case DictionaryLookupController::FoundStatus::Stem:       return LookupHistory::Status::Stem;
+    case DictionaryLookupController::FoundStatus::AltForm:    return LookupHistory::Status::AltForm;
+    case DictionaryLookupController::FoundStatus::Suggestion: return LookupHistory::Status::Suggestion;
+    default:                                                  return LookupHistory::Status::NotFound;
+  }
+}
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
@@ -323,9 +334,12 @@ void DictionaryDefinitionActivity::handleNotFound(const std::string& word) {
             return;
           }
           const auto& wr = std::get<WordResult>(result.data);
-          controller.startLookup(wr.word);  // in-place replace on FoundDefinition
+          controller.startLookupAsSuggestion(wr.word);  // in-place replace on FoundDefinition
         });
     return;
+  }
+  if (!cachePath.empty()) {
+    LookupHistory::addWord(cachePath, word, LookupHistory::Status::NotFound);
   }
   controller.setNotFound();
 }
@@ -339,6 +353,11 @@ void DictionaryDefinitionActivity::loop() {
   if (controller.isActive()) {
     switch (controller.handleInput()) {
       case DictionaryLookupController::LookupEvent::FoundDefinition:
+        if (!cachePath.empty() && !chainBackNavInProgress) {
+          LookupHistory::addWord(cachePath, controller.getLookupWord(), toHistStatus(controller.getFoundStatus()));
+          chainDepth++;
+        }
+        chainBackNavInProgress = false;
         headword = controller.getFoundWord();
         definition = controller.getFoundDefinition();
         wrapText();
@@ -465,12 +484,24 @@ void DictionaryDefinitionActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (showLookupButton && mappedInput.getHeldTime() >= LONG_PRESS_MS) {
-      setResult(ActivityResult{});  // Done: isCancelled=false
-    } else {
-      ActivityResult r;
-      r.isCancelled = true;
-      setResult(std::move(r));
+      setResult(ActivityResult{});  // Done: isCancelled=false — exit all the way
+      finish();
+      return;
     }
+    if (!cachePath.empty() && chainDepth > 0) {
+      chainDepth--;
+      const int fileIdx = chainStartIndex - 1 + chainDepth;
+      const std::string prevWord = LookupHistory::getWordAt(cachePath, fileIdx);
+      if (!prevWord.empty()) {
+        chainBackNavInProgress = true;
+        controller.startLookup(prevWord);
+        return;
+      }
+      // File read failed — fall through to normal exit
+    }
+    ActivityResult r;
+    r.isCancelled = true;
+    setResult(std::move(r));
     finish();
     return;
   }

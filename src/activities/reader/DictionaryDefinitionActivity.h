@@ -20,12 +20,15 @@ class DictionaryDefinitionActivity final : public Activity {
   //   Back/Confirm both return to caller (isCancelled=true). Unchanged from old behaviour.
   explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                         const std::string& headword, const std::string& definition, int readerFontId,
-                                        bool showLookupButton = false)
+                                        bool showLookupButton = false, std::string cachePath = "",
+                                        int chainStartIndex = 0)
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(headword),
         definition(definition),
         readerFontId(readerFontId),
         showLookupButton(showLookupButton),
+        cachePath(std::move(cachePath)),
+        chainStartIndex(chainStartIndex),
         controller(renderer, mappedInput, *this) {}
 
   void onEnter() override;
@@ -38,6 +41,10 @@ class DictionaryDefinitionActivity final : public Activity {
   std::string definition;
   int readerFontId;
   bool showLookupButton;
+  std::string cachePath;
+  int chainStartIndex = 0;
+  int chainDepth = 0;
+  bool chainBackNavInProgress = false;
 
   // A single styled run within a display line.
   struct LayoutSegment {

@@ -29,6 +29,11 @@ void DictionaryLookupController::startLookup(const std::string& word) {
   xTaskCreate(taskEntry, "DictLookup", 4096, this, 1, &taskHandle);
 }
 
+void DictionaryLookupController::startLookupAsSuggestion(const std::string& word) {
+  nextIsSuggestion = true;
+  startLookup(word);
+}
+
 void DictionaryLookupController::setNotFound() {
   state = LookupState::NotFound;
   owner.requestUpdate();
@@ -47,10 +52,15 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
       state = LookupState::Idle;
       taskHandle = nullptr;
 
-      if (lookupCancelled) return LookupEvent::Cancelled;
+      if (lookupCancelled) {
+        nextIsSuggestion = false;
+        return LookupEvent::Cancelled;
+      }
 
       if (!foundDefinition.empty()) {
         foundWord = lookupWord;
+        foundStatus = nextIsSuggestion ? FoundStatus::Suggestion : FoundStatus::Direct;
+        nextIsSuggestion = false;
         return LookupEvent::FoundDefinition;
       }
 
@@ -61,6 +71,8 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
         if (!stemDef.empty()) {
           foundWord = stem;
           foundDefinition = stemDef;
+          foundStatus = nextIsSuggestion ? FoundStatus::Suggestion : FoundStatus::Stem;
+          nextIsSuggestion = false;
           return LookupEvent::FoundDefinition;
         }
       }
@@ -72,6 +84,7 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
         return LookupEvent::None;
       }
 
+      nextIsSuggestion = false;
       return LookupEvent::LookupFailed;
     }
 
@@ -92,13 +105,17 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
         if (!def.empty()) {
           foundWord = canonical;
           foundDefinition = def;
+          foundStatus = nextIsSuggestion ? FoundStatus::Suggestion : FoundStatus::AltForm;
+          nextIsSuggestion = false;
           return LookupEvent::FoundDefinition;
         }
       }
+      nextIsSuggestion = false;
       return LookupEvent::LookupFailed;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       state = LookupState::Idle;
+      nextIsSuggestion = false;
       return LookupEvent::Cancelled;
     }
     return LookupEvent::None;
