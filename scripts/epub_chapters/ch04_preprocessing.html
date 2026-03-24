@@ -4,6 +4,22 @@
 Open Settings -> Dictionary for each test.
 No word lookups are needed in this chapter.</p>
 
+<h2>Offline Preparation: all-prep dictionary</h2>
+<p>Run the offline pre-processor on the host to verify that
+<code>prep_dict.py</code> correctly applies all four preparation steps.
+This is a host-only check — no device required.</p>
+<p><strong>Note:</strong> Test E in this chapter tests on-device processing using the
+<em>raw</em> (unprocessed) <em>all-prep</em> dictionary. Do not copy the output of this
+offline step to the SD card before running Test E.</p>
+<h3>Steps</h3>
+<ol>
+<li>Run: <code>python3 scripts/prep_dict.py test/dictionaries/all-prep</code></li>
+<li>Verify output folder <code>dictionaries/all-prep/</code> contains:
+  <code>all-prep.dict</code>, <code>all-prep.idx</code>, <code>all-prep.idx.oft</code>,
+  <code>all-prep.syn</code>, <code>all-prep.syn.oft</code>, <code>all-prep.ifo</code>
+</li>
+</ol>
+
 <h2>Test A: Generate dictionary offset file only</h2>
 <p>This test first verifies that pressing <em>&#171; Back</em> at the confirmation screen
 cancels without starting any processing, then completes the preparation.
