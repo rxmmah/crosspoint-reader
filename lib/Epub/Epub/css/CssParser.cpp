@@ -52,6 +52,29 @@ constexpr size_t MAX_SELECTOR_LENGTH = 256;
 // Check if character is CSS whitespace
 bool isCssWhitespace(const char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'; }
 
+std::string_view stripTrailingImportant(std::string_view value) {
+  constexpr std::string_view IMPORTANT = "!important";
+
+  while (!value.empty() && isCssWhitespace(value.back())) {
+    value.remove_suffix(1);
+  }
+
+  if (value.size() < IMPORTANT.size()) {
+    return value;
+  }
+
+  const size_t suffixPos = value.size() - IMPORTANT.size();
+  if (value.substr(suffixPos) != IMPORTANT) {
+    return value;
+  }
+
+  value.remove_suffix(IMPORTANT.size());
+  while (!value.empty() && isCssWhitespace(value.back())) {
+    value.remove_suffix(1);
+  }
+  return value;
+}
+
 }  // anonymous namespace
 
 // String utilities implementation
@@ -326,6 +349,10 @@ void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& sty
       style.imageWidth = len;
       style.defined.imageWidth = 1;
     }
+  } else if (propNameBuf == "display") {
+    const std::string_view displayValue = stripTrailingImportant(propValueBuf);
+    style.display = (displayValue == "none") ? CssDisplay::None : CssDisplay::Block;
+    style.defined.display = 1;
   }
 }
 
@@ -702,25 +729,27 @@ bool CssParser::saveToCache() const {
     writeLength(style.paddingRight);
     writeLength(style.imageHeight);
     writeLength(style.imageWidth);
+    file.write(static_cast<uint8_t>(style.display));
 
-    // Write defined flags as uint16_t
-    uint16_t definedBits = 0;
-    if (style.defined.textAlign) definedBits |= 1 << 0;
-    if (style.defined.direction) definedBits |= 1 << 1;
-    if (style.defined.fontStyle) definedBits |= 1 << 2;
-    if (style.defined.fontWeight) definedBits |= 1 << 3;
-    if (style.defined.textDecoration) definedBits |= 1 << 4;
-    if (style.defined.textIndent) definedBits |= 1 << 5;
-    if (style.defined.marginTop) definedBits |= 1 << 6;
-    if (style.defined.marginBottom) definedBits |= 1 << 7;
-    if (style.defined.marginLeft) definedBits |= 1 << 8;
-    if (style.defined.marginRight) definedBits |= 1 << 9;
-    if (style.defined.paddingTop) definedBits |= 1 << 10;
-    if (style.defined.paddingBottom) definedBits |= 1 << 11;
-    if (style.defined.paddingLeft) definedBits |= 1 << 12;
-    if (style.defined.paddingRight) definedBits |= 1 << 13;
-    if (style.defined.imageHeight) definedBits |= 1 << 14;
-    if (style.defined.imageWidth) definedBits |= 1 << 15;
+    // Write defined flags as uint32_t so we can preserve both direction and display.
+    uint32_t definedBits = 0;
+    if (style.defined.textAlign) definedBits |= 1u << 0;
+    if (style.defined.direction) definedBits |= 1u << 1;
+    if (style.defined.fontStyle) definedBits |= 1u << 2;
+    if (style.defined.fontWeight) definedBits |= 1u << 3;
+    if (style.defined.textDecoration) definedBits |= 1u << 4;
+    if (style.defined.textIndent) definedBits |= 1u << 5;
+    if (style.defined.marginTop) definedBits |= 1u << 6;
+    if (style.defined.marginBottom) definedBits |= 1u << 7;
+    if (style.defined.marginLeft) definedBits |= 1u << 8;
+    if (style.defined.marginRight) definedBits |= 1u << 9;
+    if (style.defined.paddingTop) definedBits |= 1u << 10;
+    if (style.defined.paddingBottom) definedBits |= 1u << 11;
+    if (style.defined.paddingLeft) definedBits |= 1u << 12;
+    if (style.defined.paddingRight) definedBits |= 1u << 13;
+    if (style.defined.imageHeight) definedBits |= 1u << 14;
+    if (style.defined.imageWidth) definedBits |= 1u << 15;
+    if (style.defined.display) definedBits |= 1u << 16;
     file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
   }
 
@@ -759,11 +788,39 @@ bool CssParser::loadFromCache() {
     return false;
   }
 
+  if (ruleCount > MAX_RULES) {
+    LOG_DBG("CSS", "Invalid cache rule count (%u > %zu)", ruleCount, MAX_RULES);
+    rulesBySelector_.clear();
+    file.close();
+    return false;
+  }
+
+  auto hasRemainingBytes = [&file](const size_t neededBytes) -> bool {
+    return static_cast<size_t>(file.available()) >= neededBytes;
+  };
+
+  constexpr size_t CSS_LENGTH_FIELD_COUNT = 11;
+  constexpr size_t CSS_LENGTH_BYTES = sizeof(float) + sizeof(uint8_t);
+  constexpr size_t CSS_FIXED_STYLE_BYTES =
+      4 * sizeof(uint8_t) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) + sizeof(uint8_t) + sizeof(uint16_t);
+
   // Read each rule
   for (uint16_t i = 0; i < ruleCount; ++i) {
     // Read selector string
     uint16_t selectorLen = 0;
+    if (!hasRemainingBytes(sizeof(selectorLen))) {
+      rulesBySelector_.clear();
+      file.close();
+      return false;
+    }
     if (file.read(&selectorLen, sizeof(selectorLen)) != sizeof(selectorLen)) {
+      rulesBySelector_.clear();
+      file.close();
+      return false;
+    }
+
+    if (selectorLen == 0 || selectorLen > MAX_SELECTOR_LENGTH || !hasRemainingBytes(selectorLen)) {
+      LOG_DBG("CSS", "Invalid selector length in cache: %u", selectorLen);
       rulesBySelector_.clear();
       file.close();
       return false;
@@ -772,6 +829,13 @@ bool CssParser::loadFromCache() {
     std::string selector;
     selector.resize(selectorLen);
     if (file.read(&selector[0], selectorLen) != selectorLen) {
+      rulesBySelector_.clear();
+      file.close();
+      return false;
+    }
+
+    if (!hasRemainingBytes(CSS_FIXED_STYLE_BYTES)) {
+      LOG_DBG("CSS", "Truncated CSS cache while reading style payload");
       rulesBySelector_.clear();
       file.close();
       return false;
@@ -838,29 +902,39 @@ bool CssParser::loadFromCache() {
       return false;
     }
 
+    // Read display value
+    uint8_t displayVal;
+    if (file.read(&displayVal, 1) != 1) {
+      rulesBySelector_.clear();
+      file.close();
+      return false;
+    }
+    style.display = static_cast<CssDisplay>(displayVal);
+
     // Read defined flags
-    uint16_t definedBits = 0;
+    uint32_t definedBits = 0;
     if (file.read(&definedBits, sizeof(definedBits)) != sizeof(definedBits)) {
       rulesBySelector_.clear();
       file.close();
       return false;
     }
-    style.defined.textAlign = (definedBits & 1 << 0) != 0;
-    style.defined.direction = (definedBits & 1 << 1) != 0;
-    style.defined.fontStyle = (definedBits & 1 << 2) != 0;
-    style.defined.fontWeight = (definedBits & 1 << 3) != 0;
-    style.defined.textDecoration = (definedBits & 1 << 4) != 0;
-    style.defined.textIndent = (definedBits & 1 << 5) != 0;
-    style.defined.marginTop = (definedBits & 1 << 6) != 0;
-    style.defined.marginBottom = (definedBits & 1 << 7) != 0;
-    style.defined.marginLeft = (definedBits & 1 << 8) != 0;
-    style.defined.marginRight = (definedBits & 1 << 9) != 0;
-    style.defined.paddingTop = (definedBits & 1 << 10) != 0;
-    style.defined.paddingBottom = (definedBits & 1 << 11) != 0;
-    style.defined.paddingLeft = (definedBits & 1 << 12) != 0;
-    style.defined.paddingRight = (definedBits & 1 << 13) != 0;
-    style.defined.imageHeight = (definedBits & 1 << 14) != 0;
-    style.defined.imageWidth = (definedBits & 1 << 15) != 0;
+    style.defined.textAlign = (definedBits & (1u << 0)) != 0;
+    style.defined.direction = (definedBits & (1u << 1)) != 0;
+    style.defined.fontStyle = (definedBits & (1u << 2)) != 0;
+    style.defined.fontWeight = (definedBits & (1u << 3)) != 0;
+    style.defined.textDecoration = (definedBits & (1u << 4)) != 0;
+    style.defined.textIndent = (definedBits & (1u << 5)) != 0;
+    style.defined.marginTop = (definedBits & (1u << 6)) != 0;
+    style.defined.marginBottom = (definedBits & (1u << 7)) != 0;
+    style.defined.marginLeft = (definedBits & (1u << 8)) != 0;
+    style.defined.marginRight = (definedBits & (1u << 9)) != 0;
+    style.defined.paddingTop = (definedBits & (1u << 10)) != 0;
+    style.defined.paddingBottom = (definedBits & (1u << 11)) != 0;
+    style.defined.paddingLeft = (definedBits & (1u << 12)) != 0;
+    style.defined.paddingRight = (definedBits & (1u << 13)) != 0;
+    style.defined.imageHeight = (definedBits & (1u << 14)) != 0;
+    style.defined.imageWidth = (definedBits & (1u << 15)) != 0;
+    style.defined.display = (definedBits & (1u << 16)) != 0;
 
     rulesBySelector_[selector] = style;
   }

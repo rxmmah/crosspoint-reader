@@ -237,6 +237,24 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   centeredBlockStyle.textAlignDefined = true;
   centeredBlockStyle.alignment = CssTextAlign::Center;
 
+  // Compute CSS style for this element early so display:none can short-circuit
+  // before tag-specific branches emit any content or metadata.
+  CssStyle cssStyle;
+  if (self->cssParser) {
+    cssStyle = self->cssParser->resolveStyle(name, classAttr);
+    if (!styleAttr.empty()) {
+      CssStyle inlineStyle = CssParser::parseInlineStyle(styleAttr);
+      cssStyle.applyOver(inlineStyle);
+    }
+  }
+
+  // Skip elements with display:none before all fast paths (tables, links, etc.).
+  if (cssStyle.hasDisplay() && cssStyle.display == CssDisplay::None) {
+    self->skipUntilDepth = self->depth;
+    self->depth += 1;
+    return;
+  }
+
   // Special handling for tables/cells: flatten into per-cell paragraphs with a prefixed header.
   if (strcmp(name, "table") == 0) {
     // skip nested tables
@@ -321,6 +339,19 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         self->rtlStack.push_back(elementRtl);
         self->depth += 1;
         return;
+      }
+
+      // Skip image if CSS display:none
+      if (self->cssParser) {
+        CssStyle imgDisplayStyle = self->cssParser->resolveStyle("img", classAttr);
+        if (!styleAttr.empty()) {
+          imgDisplayStyle.applyOver(CssParser::parseInlineStyle(styleAttr));
+        }
+        if (imgDisplayStyle.hasDisplay() && imgDisplayStyle.display == CssDisplay::None) {
+          self->skipUntilDepth = self->depth;
+          self->depth += 1;
+          return;
+        }
       }
 
       if (!src.empty() && self->imageRendering != 1) {
@@ -441,6 +472,15 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   displayWidth = (int)(dims.width * scale);
                   displayHeight = (int)(dims.height * scale);
                   LOG_DBG("EHP", "Display size: %dx%d (scale %.2f)", displayWidth, displayHeight, scale);
+                }
+
+                // Flush any pending text block so it appears before the image
+                if (self->partWordBufferIndex > 0) {
+                  self->flushPartWordBuffer();
+                }
+                if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
+                  const BlockStyle parentBlockStyle = self->currentTextBlock->getBlockStyle();
+                  self->startNewTextBlock(parentBlockStyle);
                 }
 
                 // Create page for image - only break if image won't fit remaining space
