@@ -78,6 +78,12 @@ bool isArabicTransparentMark(const uint32_t codepoint) {
 
 bool isAsciiDigit(const uint32_t codepoint) { return codepoint >= '0' && codepoint <= '9'; }
 
+// Patch 1: Helper to explicitly catch Eastern Arabic Numerals
+bool isArabicDigit(const uint32_t codepoint) {
+  return (codepoint >= 0x0660 && codepoint <= 0x0669) || // Arabic-Indic digits
+         (codepoint >= 0x06F0 && codepoint <= 0x06F9);   // Extended Arabic-Indic digits
+}
+
 bool isAsciiAlpha(const uint32_t codepoint) {
   return (codepoint >= 'A' && codepoint <= 'Z') || (codepoint >= 'a' && codepoint <= 'z');
 }
@@ -92,16 +98,11 @@ bool isOpeningBracket(const uint32_t codepoint) {
 
 uint32_t matchingClosingBracket(const uint32_t codepoint) {
   switch (codepoint) {
-    case '(':
-      return ')';
-    case '[':
-      return ']';
-    case '{':
-      return '}';
-    case '<':
-      return '>';
-    default:
-      return 0;
+    case '(': return ')';
+    case '[': return ']';
+    case '{': return '}';
+    case '<': return '>';
+    default: return 0;
   }
 }
 
@@ -116,7 +117,7 @@ bool isDoubleAngleCloseAt(const std::vector<Cluster>& logical, const size_t inde
 bool isArabicStrong(const Cluster& cluster) { return cluster.type == ClusterClass::Arabic; }
 
 bool isLtrStrong(const Cluster& cluster) {
-  return cluster.type == ClusterClass::LatinOrDigit && !isAsciiDigit(cluster.base);
+  return cluster.type == ClusterClass::LatinOrDigit && !isAsciiDigit(cluster.base) && !isArabicDigit(cluster.base);
 }
 
 bool isLtrSpanCluster(const Cluster& cluster) { return cluster.type == ClusterClass::LatinOrDigit; }
@@ -140,10 +141,14 @@ bool clusterCanConnectNext(const Cluster& cluster) {
 }
 
 ClusterClass classifyCodepoint(const uint32_t codepoint) {
+  // Patch 1 continued: Classify ALL digits early to protect them from being treated as RTL Arabic text
+  if (isAsciiDigit(codepoint) || isArabicDigit(codepoint)) {
+    return ClusterClass::LatinOrDigit;
+  }
   if (ScriptDetector::isArabicCodepoint(codepoint)) {
     return ClusterClass::Arabic;
   }
-  if (isAsciiDigit(codepoint) || isAsciiAlpha(codepoint) || codepoint >= 0x0080) {
+  if (isAsciiAlpha(codepoint) || codepoint >= 0x0080) {
     return ClusterClass::LatinOrDigit;
   }
   if (isWhitespace(codepoint)) {
@@ -190,15 +195,11 @@ bool isLamAlefPair(const uint32_t lam, const uint32_t alef) {
 
 uint32_t lamAlefLigature(const uint32_t alef, const bool connectPrev) {
   switch (alef) {
-    case 0x0622:
-      return connectPrev ? 0xFEF6 : 0xFEF5;
-    case 0x0623:
-      return connectPrev ? 0xFEF8 : 0xFEF7;
-    case 0x0625:
-      return connectPrev ? 0xFEFA : 0xFEF9;
+    case 0x0622: return connectPrev ? 0xFEF6 : 0xFEF5;
+    case 0x0623: return connectPrev ? 0xFEF8 : 0xFEF7;
+    case 0x0625: return connectPrev ? 0xFEFA : 0xFEF9;
     case 0x0627:
-    default:
-      return connectPrev ? 0xFEFC : 0xFEFB;
+    default: return connectPrev ? 0xFEFC : 0xFEFB;
   }
 }
 
@@ -338,7 +339,9 @@ std::vector<Cluster> reorderVisual(const std::vector<Cluster>& logical) {
       }
     }
 
-    if (!isArabicStrong(logical[i])) {
+    // Patch 2: Only skip pushing characters directly if the base is not RTL.
+    // If we are in an RTL context, everything (even LTR text) needs to be mapped to visual positioning correctly.
+    if (!baseRtl && !isArabicStrong(logical[i])) {
       visual.push_back(logical[i]);
       ++i;
       continue;
@@ -444,9 +447,40 @@ std::vector<Cluster> reorderVisual(const std::vector<Cluster>& logical) {
       visual.push_back(logical[index - 1]);
     }
 
+    // Patch 3: Keep numeric formats (decimals, commas) and English spaces bound 
+    // to their LTR sequences, rather than scattering them during the un-reverse pass.
     size_t spanStart = visualStart;
     for (size_t index = visualStart; index <= visual.size(); ++index) {
-      const bool inLtrSpan = index < visual.size() && isLtrSpanCluster(visual[index]);
+      bool inLtrSpan = false;
+      if (index < visual.size()) {
+        if (isLtrSpanCluster(visual[index])) {
+          inLtrSpan = true;
+        } else {
+          uint32_t cp = visual[index].base;
+          bool isConnector = (cp == ' ' || cp == '\t' || cp == '.' || cp == ',' ||
+                              cp == ':' || cp == '/' || cp == '-' || cp == '_');
+          if (isConnector) {
+            bool leftLtr = false;
+            for (int j = static_cast<int>(index) - 1; j >= static_cast<int>(visualStart); --j) {
+              if (isLtrSpanCluster(visual[j])) { leftLtr = true; break; }
+              uint32_t jcp = visual[j].base;
+              if (!(jcp == ' ' || jcp == '\t' || jcp == '.' || jcp == ',' ||
+                    jcp == ':' || jcp == '/' || jcp == '-' || jcp == '_')) break;
+            }
+            bool rightLtr = false;
+            if (leftLtr) {
+              for (size_t j = index + 1; j < visual.size(); ++j) {
+                if (isLtrSpanCluster(visual[j])) { rightLtr = true; break; }
+                uint32_t jcp = visual[j].base;
+                if (!(jcp == ' ' || jcp == '\t' || jcp == '.' || jcp == ',' ||
+                      jcp == ':' || jcp == '/' || jcp == '-' || jcp == '_')) break;
+              }
+            }
+            inLtrSpan = leftLtr && rightLtr;
+          }
+        }
+      }
+
       if (inLtrSpan) {
         continue;
       }
