@@ -21,7 +21,8 @@ class OpdsBookBrowserActivity final : public Activity {
     LOADING,         // Fetching OPDS feed
     BROWSING,        // Displaying entries (navigation or books)
     DOWNLOADING,     // Downloading selected EPUB
-    ERROR            // Error state with message
+    ERROR,           // Error state with message
+    SEARCH_INPUT     // Keyboard entry subactivity is active
   };
 
   explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -38,6 +39,8 @@ class OpdsBookBrowserActivity final : public Activity {
   std::vector<OpdsEntry> entries;
   std::vector<std::string> navigationHistory;  // Stack of previous feed paths for back navigation
   std::string currentPath;                     // Current feed path being displayed
+  std::string searchTemplate;                  // OpenSearch template URL, empty if server has no search
+  bool consumeConfirm = false;                 // Swallows the Confirm release that closed the keyboard
   int selectorIndex = 0;
   std::string errorMessage;
   std::string statusMessage;
@@ -51,5 +54,7 @@ class OpdsBookBrowserActivity final : public Activity {
   void navigateToEntry(const OpdsEntry& entry);
   void navigateBack();
   void downloadBook(const OpdsEntry& book);
+  void launchSearch();
+  void performSearch(const std::string& query);
   bool preventAutoSleep() override { return true; }
 };

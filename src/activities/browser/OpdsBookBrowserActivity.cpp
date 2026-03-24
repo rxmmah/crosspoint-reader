@@ -10,6 +10,7 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
@@ -26,8 +27,10 @@ void OpdsBookBrowserActivity::onEnter() {
   state = BrowserState::CHECK_WIFI;
   entries.clear();
   navigationHistory.clear();
+  searchTemplate = "";
   currentPath = "";  // Root path - user provides full URL in settings
   selectorIndex = 0;
+  consumeConfirm = false;
   errorMessage.clear();
   statusMessage = tr(STR_CHECKING_WIFI);
   requestUpdate();
@@ -47,9 +50,9 @@ void OpdsBookBrowserActivity::onExit() {
 }
 
 void OpdsBookBrowserActivity::loop() {
-  // Handle WiFi selection subactivity
-  if (state == BrowserState::WIFI_SELECTION) {
-    // Should already handled by the WifiSelectionActivity
+  // Handle WiFi selection / search input subactivities
+  if (state == BrowserState::WIFI_SELECTION || state == BrowserState::SEARCH_INPUT) {
+    // Already handled by the child activity
     return;
   }
 
@@ -99,7 +102,9 @@ void OpdsBookBrowserActivity::loop() {
   // Handle browsing state
   if (state == BrowserState::BROWSING) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (!entries.empty()) {
+      if (consumeConfirm) {
+        consumeConfirm = false;
+      } else if (!entries.empty()) {
         const auto& entry = entries[selectorIndex];
         if (entry.type == OpdsEntryType::BOOK) {
           downloadBook(entry);
@@ -109,6 +114,10 @@ void OpdsBookBrowserActivity::loop() {
       }
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       navigateBack();
+    } else if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+      if (!searchTemplate.empty()) {
+        launchSearch();
+      }
     }
 
     // Handle navigation
@@ -192,7 +201,8 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   if (!entries.empty() && entries[selectorIndex].type == OpdsEntryType::BOOK) {
     confirmLabel = tr(STR_DOWNLOAD);
   }
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const char* searchLabel = searchTemplate.empty() ? "" : tr(STR_CUSTOM);
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, searchLabel, tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (entries.empty()) {
@@ -236,7 +246,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     return;
   }
 
-  std::string url = UrlUtils::buildUrl(serverUrl, path);
+  std::string url = (path.find("http") == 0) ? path : UrlUtils::buildUrl(serverUrl, path);
   LOG_DBG("OPDS", "Fetching: %s", url.c_str());
 
   OpdsParser parser;
@@ -257,6 +267,8 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     requestUpdate();
     return;
   }
+
+  searchTemplate = parser.getSearchTemplate();
 
   entries = std::move(parser).getEntries();
   LOG_DBG("OPDS", "Found %d entries", entries.size());
@@ -347,6 +359,60 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     errorMessage = tr(STR_DOWNLOAD_FAILED);
     requestUpdate();
   }
+}
+
+void OpdsBookBrowserActivity::launchSearch() {
+  state = BrowserState::SEARCH_INPUT;
+  requestUpdate();
+
+  auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_CUSTOM));
+
+  startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
+    if (!result.isCancelled) {
+      consumeConfirm = true;
+      performSearch(std::get<KeyboardResult>(result.data).text);
+    } else {
+      state = BrowserState::BROWSING;
+      requestUpdate();
+    }
+  });
+}
+
+void OpdsBookBrowserActivity::performSearch(const std::string& query) {
+  if (query.empty() || searchTemplate.empty()) {
+    state = BrowserState::BROWSING;
+    requestUpdate();
+    return;
+  }
+
+  // StringUtils has no url_encode — encode inline
+  auto urlEncode = [](const std::string& s) {
+    std::string out;
+    out.reserve(s.size() * 3);
+    for (unsigned char c : s) {
+      if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+        out += static_cast<char>(c);
+      } else {
+        char buf[4];
+        snprintf(buf, sizeof(buf), "%%%02X", c);
+        out += buf;
+      }
+    }
+    return out;
+  };
+
+  std::string url = searchTemplate;
+  const std::string placeholder = "{searchTerms}";
+  const size_t pos = url.find(placeholder);
+  if (pos != std::string::npos) {
+    url.replace(pos, placeholder.length(), urlEncode(query));
+  }
+
+  LOG_DBG("OPDS", "Search URL: %s", url.c_str());
+  state = BrowserState::LOADING;
+  statusMessage = tr(STR_LOADING);
+  requestUpdate(true);
+  fetchFeed(url);
 }
 
 void OpdsBookBrowserActivity::checkAndConnectWifi() {
