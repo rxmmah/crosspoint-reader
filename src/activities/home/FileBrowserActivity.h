@@ -37,7 +37,7 @@ class FileBrowserActivity final : public Activity {
   std::vector<std::string> pickerFolders;
   std::vector<std::string> pickerFiles;  // shown grayed for context, not selectable
   size_t pickerIndex = 0;
-  bool consumeBack = false;  // swallows the Back release that dismissed the keyboard
+  bool consumeBack = false;     // swallows the Back release that dismissed the keyboard
   bool consumeConfirm = false;  // swallows the Confirm release that dismissed the keyboard
 
   // Data loading

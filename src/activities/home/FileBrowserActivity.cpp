@@ -121,8 +121,7 @@ void FileBrowserActivity::loadPickerFolders() {
   char name[500];
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(name, sizeof(name));
-        if ((!SETTINGS.showHiddenFiles && name[0] == '.') ||
-        strcmp(name, "System Volume Information") == 0) {
+    if ((!SETTINGS.showHiddenFiles && name[0] == '.') || strcmp(name, "System Volume Information") == 0) {
       file.close();
       continue;
     }
@@ -130,7 +129,8 @@ void FileBrowserActivity::loadPickerFolders() {
       pickerFolders.emplace_back(std::string(name) + "/");
     } else {
       pickerFiles.emplace_back(std::string(name));
-    }file.close();
+    }
+    file.close();
   }
   root.close();
   sortFileList(pickerFolders);
@@ -166,8 +166,8 @@ void FileBrowserActivity::performMove(const std::string& destPath) {
     const std::string dstParent = (dstSlash != std::string::npos) ? dest.substr(0, dstSlash) : "";
 
     if (srcParent == dstParent) {
-      LOG_ERR("FileBrowser", "rename failed within same directory, skipping copy+delete: %s -> %s",
-              fileToMove.c_str(), dest.c_str());
+      LOG_ERR("FileBrowser", "rename failed within same directory, skipping copy+delete: %s -> %s", fileToMove.c_str(),
+              dest.c_str());
     } else {
       // Refuse to overwrite an existing file at the destination
       auto existing = Storage.open(dest.c_str());
