@@ -86,20 +86,15 @@ void FileBrowserActivity::loadFiles() {
   char name[500];
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(name, sizeof(name));
-    if ((!SETTINGS.showHiddenFiles && name[0] == '.') || strcmp(name, "System Volume Information") == 0) {
+    if ((!SETTINGS.showHiddenFiles && name[0] == '.') ||
+        strcmp(name, "System Volume Information") == 0) {
       file.close();
       continue;
     }
-
     if (file.isDirectory()) {
-      files.emplace_back(std::string(name) + "/");
+      pickerFolders.emplace_back(std::string(name) + "/");
     } else {
-      std::string_view filename{name};
-      if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
-          FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
-          FsHelpers::hasBmpExtension(filename)) {
-        files.emplace_back(filename);
-      }
+      pickerFiles.emplace_back(std::string(name));
     }
     file.close();
   }
@@ -455,6 +450,7 @@ void FileBrowserActivity::loop() {
     consumeConfirm = true;
     auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "New Folder");
     startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
+      consumeBack = false;
       if (!result.isCancelled) {
         createFolder(std::get<KeyboardResult>(result.data).text);
       }
