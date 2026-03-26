@@ -121,14 +121,16 @@ void FileBrowserActivity::loadPickerFolders() {
   char name[500];
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(name, sizeof(name));
-    if (name[0] != '.') {
-      if (file.isDirectory()) {
-        pickerFolders.emplace_back(std::string(name) + "/");
-      } else {
-        pickerFiles.emplace_back(std::string(name));
-      }
+        if ((!SETTINGS.showHiddenFiles && name[0] == '.') ||
+        strcmp(name, "System Volume Information") == 0) {
+      file.close();
+      continue;
     }
-    file.close();
+    if (file.isDirectory()) {
+      pickerFolders.emplace_back(std::string(name) + "/");
+    } else {
+      pickerFiles.emplace_back(std::string(name));
+    }file.close();
   }
   root.close();
   sortFileList(pickerFolders);
@@ -143,51 +145,81 @@ void FileBrowserActivity::performMove(const std::string& destPath) {
   if (dest.back() != '/') dest += "/";
   dest += filename;
 
+  // Short-circuit: source and destination are the same path
+  if (dest == fileToMove) {
+    LOG_DBG("FileBrowser", "Move skipped: source and destination are identical: %s", fileToMove.c_str());
+    fileToMove.clear();
+    mode = BrowserMode::NORMAL;
+    requestUpdate(true);
+    return;
+  }
+
   clearFileMetadata(fileToMove);
 
   bool ok = Storage.rename(fileToMove.c_str(), dest.c_str());
 
   if (!ok) {
-    // rename() fails across directories on FAT32 — fall back to copy + delete
-    LOG_DBG("FileBrowser", "rename failed, trying copy+delete: %s -> %s", fileToMove.c_str(), dest.c_str());
+    // Only attempt copy+delete for true cross-directory moves
+    const auto srcSlash = fileToMove.rfind('/');
+    const auto dstSlash = dest.rfind('/');
+    const std::string srcParent = (srcSlash != std::string::npos) ? fileToMove.substr(0, srcSlash) : "";
+    const std::string dstParent = (dstSlash != std::string::npos) ? dest.substr(0, dstSlash) : "";
 
-    HalFile src, dst;
-    ok = Storage.openFileForRead("FileBrowser", fileToMove, src) && Storage.openFileForWrite("FileBrowser", dest, dst);
-
-    if (ok) {
-      constexpr size_t BUF_SIZE = 512;
-      uint8_t buf[BUF_SIZE];
-      bool copyOk = true;
-      while (src.available()) {
-        const int n = src.read(buf, BUF_SIZE);
-        if (n <= 0) break;
-        if (dst.write(buf, static_cast<size_t>(n)) != static_cast<size_t>(n)) {
-          copyOk = false;
-          break;
-        }
-      }
-      src.close();
-      dst.close();
-
-      if (copyOk) {
-        if (Storage.remove(fileToMove.c_str())) {
-          LOG_DBG("FileBrowser", "Copy+delete succeeded: %s -> %s", fileToMove.c_str(), dest.c_str());
-          ok = true;
-        } else {
-          // Copy succeeded but original not removed — clean up the copy
-          LOG_ERR("FileBrowser", "Copy ok but delete failed, removing copy: %s", dest.c_str());
-          Storage.remove(dest.c_str());
-          ok = false;
-        }
-      } else {
-        LOG_ERR("FileBrowser", "Copy failed, removing partial dest: %s", dest.c_str());
-        Storage.remove(dest.c_str());
-        ok = false;
-      }
+    if (srcParent == dstParent) {
+      LOG_ERR("FileBrowser", "rename failed within same directory, skipping copy+delete: %s -> %s",
+              fileToMove.c_str(), dest.c_str());
     } else {
-      LOG_ERR("FileBrowser", "Could not open files for copy: %s -> %s", fileToMove.c_str(), dest.c_str());
-    }
-  }
+      // Refuse to overwrite an existing file at the destination
+      auto existing = Storage.open(dest.c_str());
+      if (existing) {
+        existing.close();
+        LOG_ERR("FileBrowser", "Move aborted: destination already exists: %s", dest.c_str());
+      } else {
+        // rename() fails across directories on FAT32 — fall back to copy + delete
+        LOG_DBG("FileBrowser", "rename failed, trying copy+delete: %s -> %s", fileToMove.c_str(), dest.c_str());
+
+        HalFile src, dst;
+        bool srcOpen = Storage.openFileForRead("FileBrowser", fileToMove, src);
+        bool dstOpen = srcOpen && Storage.openFileForWrite("FileBrowser", dest, dst);
+        ok = srcOpen && dstOpen;
+
+        if (ok) {
+          constexpr size_t BUF_SIZE = 512;
+          uint8_t buf[BUF_SIZE];
+          bool copyOk = true;
+          while (src.available()) {
+            const int n = src.read(buf, BUF_SIZE);
+            if (n <= 0) break;
+            if (dst.write(buf, static_cast<size_t>(n)) != static_cast<size_t>(n)) {
+              copyOk = false;
+              break;
+            }
+          }
+          src.close();
+          dst.close();
+
+          if (copyOk) {
+            if (Storage.remove(fileToMove.c_str())) {
+              LOG_DBG("FileBrowser", "Copy+delete succeeded: %s -> %s", fileToMove.c_str(), dest.c_str());
+              ok = true;
+            } else {
+              // Copy succeeded but original not removed — clean up the copy
+              if (srcOpen) src.close();
+              LOG_ERR("FileBrowser", "Copy ok but delete failed, removing copy: %s", dest.c_str());
+              Storage.remove(dest.c_str());
+              ok = false;
+            }
+          } else {
+            LOG_ERR("FileBrowser", "Copy failed, removing partial dest: %s", dest.c_str());
+            Storage.remove(dest.c_str());
+            ok = false;
+          }
+        } else {
+          LOG_ERR("FileBrowser", "Could not open files for copy: %s -> %s", fileToMove.c_str(), dest.c_str());
+        }
+      }  // else: destination does not exist
+    }  // else: cross-directory move
+  }  // if (!ok)
 
   if (!ok) {
     LOG_ERR("FileBrowser", "Move failed: %s -> %s", fileToMove.c_str(), dest.c_str());
@@ -314,6 +346,10 @@ void FileBrowserActivity::loop() {
   const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (consumeConfirm) {
+      consumeConfirm = false;
+      return;
+    }
     if (files.empty()) return;
 
     const std::string& entry = files[selectorIndex];
@@ -416,6 +452,7 @@ void FileBrowserActivity::loop() {
   // Right (bottom button): create a new folder in the current directory
   if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
     consumeBack = true;
+    consumeConfirm = true;
     auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "New Folder");
     startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
       if (!result.isCancelled) {
