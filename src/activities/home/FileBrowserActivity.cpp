@@ -86,15 +86,14 @@ void FileBrowserActivity::loadFiles() {
   char name[500];
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(name, sizeof(name));
-    if ((!SETTINGS.showHiddenFiles && name[0] == '.') ||
-        strcmp(name, "System Volume Information") == 0) {
+    if ((!SETTINGS.showHiddenFiles && name[0] == '.') || strcmp(name, "System Volume Information") == 0) {
       file.close();
       continue;
     }
     if (file.isDirectory()) {
-      pickerFolders.emplace_back(std::string(name) + "/");
+      files.emplace_back(std::string(name) + "/");
     } else {
-      pickerFiles.emplace_back(std::string(name));
+      files.emplace_back(std::string(name));
     }
     file.close();
   }
@@ -149,9 +148,11 @@ void FileBrowserActivity::performMove(const std::string& destPath) {
     return;
   }
 
-  clearFileMetadata(fileToMove);
-
   bool ok = Storage.rename(fileToMove.c_str(), dest.c_str());
+
+  if (ok) {
+    clearFileMetadata(fileToMove);
+  }
 
   if (!ok) {
     // Only attempt copy+delete for true cross-directory moves
@@ -184,7 +185,10 @@ void FileBrowserActivity::performMove(const std::string& destPath) {
           bool copyOk = true;
           while (src.available()) {
             const int n = src.read(buf, BUF_SIZE);
-            if (n <= 0) break;
+            if (n <= 0) {
+              copyOk = false;
+              break;
+            }
             if (dst.write(buf, static_cast<size_t>(n)) != static_cast<size_t>(n)) {
               copyOk = false;
               break;
@@ -451,6 +455,7 @@ void FileBrowserActivity::loop() {
     auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "New Folder");
     startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
       consumeBack = false;
+      consumeConfirm = false;
       if (!result.isCancelled) {
         createFolder(std::get<KeyboardResult>(result.data).text);
       }
