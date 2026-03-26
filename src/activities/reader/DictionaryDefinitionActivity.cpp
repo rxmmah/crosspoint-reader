@@ -255,6 +255,7 @@ void DictionaryDefinitionActivity::wrapHtml() {
     } else {
       style = EpdFontFamily::REGULAR;
     }
+    if (span.underline) style = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::UNDERLINE);
 
     if (span.newlineBefore) {
       flushLine();
@@ -661,8 +662,13 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
 
     for (const auto& seg : line.segments) {
       const int segFontId = seg.isIpa ? IPA_FONT_ID : readerFontId;
+      const int segWidth = renderer.getTextWidth(segFontId, seg.text.c_str(), seg.style);
       renderer.drawText(segFontId, x, y, seg.text.c_str(), true, seg.style);
-      x += renderer.getTextWidth(segFontId, seg.text.c_str(), seg.style);
+      if ((seg.style & EpdFontFamily::UNDERLINE) != 0) {
+        const int underlineY = y + renderer.getFontAscenderSize(segFontId) + 2;
+        renderer.drawLine(x, underlineY, x + segWidth, underlineY, true);
+      }
+      x += segWidth;
     }
   }
 
