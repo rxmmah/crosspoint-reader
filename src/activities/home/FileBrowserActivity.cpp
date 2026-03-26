@@ -149,12 +149,10 @@ void FileBrowserActivity::performMove(const std::string& destPath) {
 
   if (!ok) {
     // rename() fails across directories on FAT32 — fall back to copy + delete
-    LOG_DBG("FileBrowser", "rename failed, trying copy+delete: %s -> %s",
-            fileToMove.c_str(), dest.c_str());
+    LOG_DBG("FileBrowser", "rename failed, trying copy+delete: %s -> %s", fileToMove.c_str(), dest.c_str());
 
     HalFile src, dst;
-    ok = Storage.openFileForRead("FileBrowser", fileToMove, src) &&
-         Storage.openFileForWrite("FileBrowser", dest, dst);
+    ok = Storage.openFileForRead("FileBrowser", fileToMove, src) && Storage.openFileForWrite("FileBrowser", dest, dst);
 
     if (ok) {
       constexpr size_t BUF_SIZE = 512;
@@ -173,8 +171,7 @@ void FileBrowserActivity::performMove(const std::string& destPath) {
 
       if (copyOk) {
         if (Storage.remove(fileToMove.c_str())) {
-          LOG_DBG("FileBrowser", "Copy+delete succeeded: %s -> %s",
-                  fileToMove.c_str(), dest.c_str());
+          LOG_DBG("FileBrowser", "Copy+delete succeeded: %s -> %s", fileToMove.c_str(), dest.c_str());
           ok = true;
         } else {
           // Copy succeeded but original not removed — clean up the copy
@@ -188,8 +185,7 @@ void FileBrowserActivity::performMove(const std::string& destPath) {
         ok = false;
       }
     } else {
-      LOG_ERR("FileBrowser", "Could not open files for copy: %s -> %s",
-              fileToMove.c_str(), dest.c_str());
+      LOG_ERR("FileBrowser", "Could not open files for copy: %s -> %s", fileToMove.c_str(), dest.c_str());
     }
   }
 
@@ -288,16 +284,15 @@ void FileBrowserActivity::loop() {
     // Up/Down: navigate selectable folders only (files are display-only)
     if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
       if (!pickerFolders.empty()) {
-        pickerIndex = ButtonNavigator::previousIndex(static_cast<int>(pickerIndex),
-                                                     static_cast<int>(pickerFolders.size()));
+        pickerIndex =
+            ButtonNavigator::previousIndex(static_cast<int>(pickerIndex), static_cast<int>(pickerFolders.size()));
         requestUpdate();
       }
       return;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
       if (!pickerFolders.empty()) {
-        pickerIndex = ButtonNavigator::nextIndex(static_cast<int>(pickerIndex),
-                                                 static_cast<int>(pickerFolders.size()));
+        pickerIndex = ButtonNavigator::nextIndex(static_cast<int>(pickerIndex), static_cast<int>(pickerFolders.size()));
         requestUpdate();
       }
       return;
@@ -360,7 +355,8 @@ void FileBrowserActivity::loop() {
       };
 
       std::string heading = tr(STR_DELETE) + std::string("? ");
-      startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entryName), handler);
+      startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entryName),
+                             handler);
       return;
     } else {
       // Short-press Confirm: open / navigate
@@ -488,8 +484,7 @@ void FileBrowserActivity::render(RenderLock&&) {
     const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
     // Current picker path as sub-label
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop,
-                      pickerPath.c_str());
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop, pickerPath.c_str());
 
     const int listTop = contentTop + 20;
     const int listHeight = contentHeight - 20;
@@ -518,8 +513,7 @@ void FileBrowserActivity::render(RenderLock&&) {
     }
 
     // TODO: replace "Move Here" / "Enter" with tr() once I18n keys are added
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "Move Here",
-                                              "", pickerFolders.empty() ? "" : "Enter");
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "Move Here", "", pickerFolders.empty() ? "" : "Enter");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
@@ -543,10 +537,8 @@ void FileBrowserActivity::render(RenderLock&&) {
   // Show Move hint only for files (not directories), never when list is empty
   const bool selectedIsFile = !files.empty() && files[selectorIndex].back() != '/';
   const auto labels =
-      mappedInput.mapLabels(basepath == "/" ? tr(STR_HOME) : tr(STR_BACK),
-                            files.empty() ? "" : tr(STR_OPEN),
-                            selectedIsFile ? "Move" : "",
-                            "New Folder");
+      mappedInput.mapLabels(basepath == "/" ? tr(STR_HOME) : tr(STR_BACK), files.empty() ? "" : tr(STR_OPEN),
+                            selectedIsFile ? "Move" : "", "New Folder");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
