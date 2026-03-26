@@ -1,23 +1,12 @@
 #!/usr/bin/env python3
 """
-prep_dict.py — Offline StarDict dictionary pre-processor for CrossPoint Reader.
+dict_tools.py — Offline StarDict dictionary tools for CrossPoint Reader.
 
-Replicates the on-device preparation steps performed by DictPrepareActivity
-so dictionaries can be prepared on the host machine before copying to the SD card.
+Subcommands:
+  prep   — Pre-process a dictionary (decompress, generate offset files)
+  lookup — Look up a word in a prepared dictionary
 
-Steps performed (matching DictPrepareActivity.detectSteps()):
-  1. Extract .dict.dz -> .dict   (if .dict.dz present and .dict absent)
-  2. Extract .syn.dz  -> .syn    (if .syn.dz  present and .syn  absent)
-  3. Generate .idx.oft            (if .idx present and .idx.oft absent)
-  4. Generate .syn.oft            (if .syn present (or will exist) and .syn.oft absent)
-
-Usage:
-    python3 scripts/prep_dict.py /path/to/my-dictionary
-
-Output:
-    Processed files are written to dictionaries/<stem>/ in the project root.
-    The dictionaries/ folder is gitignored -- safe to write to.
-    Copy the output folder to the SD card dictionary folder before use.
+Run 'python3 scripts/dict_tools.py <subcommand> --help' for details.
 """
 
 import argparse
@@ -76,7 +65,7 @@ def _decompress(src: Path, dst: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Main logic
+# prep subcommand
 # ---------------------------------------------------------------------------
 
 def prep(source_folder: Path) -> None:
@@ -139,13 +128,119 @@ def prep(source_folder: Path) -> None:
     print(f"  Output: {out_dir}")
 
 
+# ---------------------------------------------------------------------------
+# lookup subcommand
+# ---------------------------------------------------------------------------
+
+def _scan_idx(idx_data: bytes, idx_oft_path: Path, word: str) -> tuple[int, int] | None:
+    """
+    Search idx_data for an exact match of word.
+    Returns (dict_offset, size) on match, None if not found.
+    Uses idx_oft_path as a jump table (if present) to skip ahead before scanning.
+    """
+    target = word.encode("utf-8")
+    start_pos = 0
+
+    if idx_oft_path.exists():
+        oft_data = idx_oft_path.read_bytes()
+        # Header is 38 bytes; remaining bytes are uint32 LE file positions,
+        # one per _STRIDE entries (position of the start of the next stride block).
+        table_bytes = oft_data[len(_OFT_HEADER):]
+        count = len(table_bytes) // 4
+        best = 0
+        for i in range(count):
+            pos = struct.unpack_from("<I", table_bytes, i * 4)[0]
+            if pos >= len(idx_data):
+                break
+            try:
+                null = idx_data.index(b"\x00", pos)
+            except ValueError:
+                break
+            # Case-fold comparison to find a safe lower bound in the sorted index.
+            if idx_data[pos:null].lower() <= target.lower():
+                best = pos
+            else:
+                break
+        start_pos = best
+
+    pos = start_pos
+    while pos < len(idx_data):
+        try:
+            null = idx_data.index(b"\x00", pos)
+        except ValueError:
+            break
+        entry_word = idx_data[pos:null]
+        entry_offset, entry_size = struct.unpack_from(">II", idx_data, null + 1)
+        pos = null + 1 + 8
+
+        if entry_word == target:
+            return entry_offset, entry_size
+
+    return None
+
+
+def lookup(folder: Path, word: str) -> None:
+    if not folder.is_dir():
+        print(f"ERROR: not a directory: {folder}", file=sys.stderr)
+        sys.exit(1)
+
+    stem = _find_stem(folder)
+    dict_path     = folder / f"{stem}.dict"
+    dict_dz_path  = folder / f"{stem}.dict.dz"
+    idx_path      = folder / f"{stem}.idx"
+    idx_oft_path  = folder / f"{stem}.idx.oft"
+
+    if not dict_path.exists():
+        if dict_dz_path.exists():
+            print(
+                f"ERROR: dictionary is still compressed. "
+                f"Run: python3 scripts/dict_tools.py prep {folder}",
+                file=sys.stderr,
+            )
+        else:
+            print(f"ERROR: {dict_path.name} not found in {folder}", file=sys.stderr)
+        sys.exit(1)
+
+    if not idx_path.exists():
+        print(f"ERROR: {idx_path.name} not found in {folder}", file=sys.stderr)
+        sys.exit(1)
+
+    result = _scan_idx(idx_path.read_bytes(), idx_oft_path, word)
+
+    if result is None:
+        print(f"Not found: {word}", file=sys.stderr)
+        sys.exit(1)
+
+    entry_offset, entry_size = result
+    with open(dict_path, "rb") as f:
+        f.seek(entry_offset)
+        print(f.read(entry_size).decode("utf-8"))
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Offline StarDict dictionary pre-processor for CrossPoint Reader."
+        description="Offline StarDict dictionary tools for CrossPoint Reader.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("folder", help="Path to the dictionary folder to process")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_prep = sub.add_parser("prep", help="Pre-process a dictionary folder")
+    p_prep.add_argument("folder", help="Path to the dictionary folder to process")
+
+    p_lookup = sub.add_parser("lookup", help="Look up a word in a prepared dictionary")
+    p_lookup.add_argument("folder", help="Path to the prepared dictionary folder")
+    p_lookup.add_argument("word", help="Word to look up (exact match, case-sensitive)")
+
     args = parser.parse_args()
-    prep(Path(args.folder))
+
+    if args.command == "prep":
+        prep(Path(args.folder))
+    elif args.command == "lookup":
+        lookup(Path(args.folder), args.word)
 
 
 if __name__ == "__main__":
