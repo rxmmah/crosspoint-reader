@@ -390,6 +390,10 @@ void FileBrowserActivity::loop() {
       };
 
       std::string heading = tr(STR_DELETE) + std::string("? ");
+
+      // FIX: Added consume flags here to prevent bleed-through after the deletion dialog closes
+      consumeConfirm = true;
+      consumeBack = true;
       startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entryName),
                              handler);
       return;
@@ -454,8 +458,7 @@ void FileBrowserActivity::loop() {
     consumeConfirm = true;
     auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "New Folder");
     startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
-      consumeBack = false;
-      consumeConfirm = false;
+      // FIX: Removed the lines resetting consumeBack and consumeConfirm to false
       if (!result.isCancelled) {
         createFolder(std::get<KeyboardResult>(result.data).text);
       }
