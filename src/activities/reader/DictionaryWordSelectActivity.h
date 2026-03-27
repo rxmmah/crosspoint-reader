@@ -14,11 +14,10 @@
 class DictionaryWordSelectActivity final : public Activity {
  public:
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        std::unique_ptr<Page> page, int fontId, int marginLeft, int marginTop,
+                                        std::unique_ptr<Page> page, int marginLeft, int marginTop,
                                         const std::string& cachePath, const std::string& nextPageFirstWord = "")
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
-        fontId(fontId),
         marginLeft(marginLeft),
         marginTop(marginTop),
         cachePath(cachePath),
@@ -32,7 +31,6 @@ class DictionaryWordSelectActivity final : public Activity {
 
  private:
   std::unique_ptr<Page> page;
-  int fontId;
   int marginLeft;
   int marginTop;
   std::string cachePath;

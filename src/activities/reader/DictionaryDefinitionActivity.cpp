@@ -10,6 +10,7 @@
 #include <memory>
 #include <numeric>
 
+#include "CrossPointSettings.h"
 #include "DictionarySuggestionsActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -81,7 +82,7 @@ void DictionaryDefinitionActivity::wrapText() {
   rightPadding = (isLandscapeCcw ? hintGutterWidth : 0) + sidePadding;
   bodyStartY = hintGutterHeight + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
 
-  const int lineHeight = renderer.getLineHeight(readerFontId);
+  const int lineHeight = renderer.getLineHeight(SETTINGS.getReaderFontId());
   const int topArea = hintGutterHeight + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
 
@@ -109,8 +110,8 @@ void DictionaryDefinitionActivity::wrapHtml() {
   const int maxWidth = screenWidth - leftPadding - rightPadding;
 
   // Indent step: 3 spaces worth of pixels at regular weight
-  const int indentStep = renderer.getTextWidth(readerFontId, "   ");
-  const int bulletWidth = renderer.getTextWidth(readerFontId, "- ");
+  const int indentStep = renderer.getTextWidth(SETTINGS.getReaderFontId(), "   ");
+  const int bulletWidth = renderer.getTextWidth(SETTINGS.getReaderFontId(), "- ");
 
   // Heap-allocate the renderer — textBuf[8192] is too large for the stack
   auto htmlRenderer = std::make_unique<DictHtmlRenderer>();
@@ -146,13 +147,13 @@ void DictionaryDefinitionActivity::wrapHtml() {
   auto getMixedWidth = [&](const std::string& text, EpdFontFamily::Style style) -> int {
     const auto runs = splitIpaRuns(text);
     return std::accumulate(runs.begin(), runs.end(), 0, [&](int sum, const IpaTextSpan& run) {
-      return sum + renderer.getTextWidth(run.isIpa ? IPA_FONT_ID : readerFontId, run.text.c_str(), style);
+      return sum + renderer.getTextWidth(run.isIpa ? IPA_FONT_ID : SETTINGS.getReaderFontId(), run.text.c_str(), style);
     });
   };
 
   auto appendMixed = [&](const std::string& text, EpdFontFamily::Style style) {
     for (const auto& run : splitIpaRuns(text)) {
-      const int fontId = run.isIpa ? IPA_FONT_ID : readerFontId;
+      const int fontId = run.isIpa ? IPA_FONT_ID : SETTINGS.getReaderFontId();
       appendToLine(run.text, style, run.isIpa, renderer.getTextWidth(fontId, run.text.c_str(), style));
     }
   };
@@ -182,7 +183,7 @@ void DictionaryDefinitionActivity::wrapHtml() {
       }
       const int cpLen = cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
       std::string cpStr(buf, cpLen);
-      const int fontId = isIpaCodepoint(cp) ? IPA_FONT_ID : readerFontId;
+      const int fontId = isIpaCodepoint(cp) ? IPA_FONT_ID : SETTINGS.getReaderFontId();
       const int cpWidth = renderer.getTextWidth(fontId, cpStr.c_str(), style);
       if (!pending.empty() && currentX + pendingWidth + cpWidth > maxWidth) {
         appendMixed(pending, style);
@@ -276,7 +277,7 @@ void DictionaryDefinitionActivity::wrapPlain() {
   auto getMixedWidthPlain = [&](const std::string& text) -> int {
     const auto runs = splitIpaRuns(text);
     return std::accumulate(runs.begin(), runs.end(), 0, [&](int sum, const IpaTextSpan& run) {
-      return sum + renderer.getTextWidth(run.isIpa ? IPA_FONT_ID : readerFontId, run.text.c_str());
+      return sum + renderer.getTextWidth(run.isIpa ? IPA_FONT_ID : SETTINGS.getReaderFontId(), run.text.c_str());
     });
   };
 
@@ -335,9 +336,9 @@ void DictionaryDefinitionActivity::wrapPlain() {
 // ---------------------------------------------------------------------------
 
 void DictionaryDefinitionActivity::extractWordsFromLayout() {
-  const int lineHeight = renderer.getLineHeight(readerFontId);
-  const int indentStep = renderer.getTextWidth(readerFontId, "   ");
-  const int spaceWidth = renderer.getTextWidth(readerFontId, " ");
+  const int lineHeight = renderer.getLineHeight(SETTINGS.getReaderFontId());
+  const int indentStep = renderer.getTextWidth(SETTINGS.getReaderFontId(), "   ");
+  const int spaceWidth = renderer.getTextWidth(SETTINGS.getReaderFontId(), " ");
 
   std::vector<WordSelectNavigator::WordInfo> words;
   std::vector<WordSelectNavigator::Row> rows;
@@ -349,7 +350,7 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
     int x = leftPadding + line.indentLevel * indentStep;
 
     if (line.isListItem) {
-      x += renderer.getTextWidth(readerFontId, "- ");
+      x += renderer.getTextWidth(SETTINGS.getReaderFontId(), "- ");
     }
 
     for (const auto& seg : line.segments) {
@@ -365,7 +366,7 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
         while (*p && *p != ' ') ++p;
         std::string tok(tokStart, p - tokStart);
 
-        const int segFontId = seg.isIpa ? IPA_FONT_ID : readerFontId;
+        const int segFontId = seg.isIpa ? IPA_FONT_ID : SETTINGS.getReaderFontId();
         const int tokWidth = renderer.getTextWidth(segFontId, tok.c_str(), seg.style);
         std::string cleaned = Dictionary::cleanWord(tok);
         if (!cleaned.empty()) {
@@ -407,7 +408,7 @@ void DictionaryDefinitionActivity::handleNotFound(const std::string& word) {
   auto similar = Dictionary::findSimilar(word, 6);
   if (!similar.empty()) {
     startActivityForResult(
-        std::make_unique<DictionarySuggestionsActivity>(renderer, mappedInput, std::move(similar), readerFontId),
+        std::make_unique<DictionarySuggestionsActivity>(renderer, mappedInput, std::move(similar)),
         [this](const ActivityResult& result) {
           if (result.isCancelled) {
             controller.setNotFound();
@@ -596,8 +597,8 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   if (controller.render()) return;
 
   const auto metrics = UITheme::getInstance().getMetrics();
-  const int lineHeight = renderer.getLineHeight(readerFontId);
-  const int indentStep = renderer.getTextWidth(readerFontId, "   ");
+  const int lineHeight = renderer.getLineHeight(SETTINGS.getReaderFontId());
+  const int indentStep = renderer.getTextWidth(SETTINGS.getReaderFontId(), "   ");
 
   // Header
   GUI.drawHeader(renderer,
@@ -613,12 +614,12 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     int x = leftPadding + line.indentLevel * indentStep;
 
     if (line.isListItem) {
-      renderer.drawText(readerFontId, x, y, "- ");
-      x += renderer.getTextWidth(readerFontId, "- ");
+      renderer.drawText(SETTINGS.getReaderFontId(), x, y, "- ");
+      x += renderer.getTextWidth(SETTINGS.getReaderFontId(), "- ");
     }
 
     for (const auto& seg : line.segments) {
-      const int segFontId = seg.isIpa ? IPA_FONT_ID : readerFontId;
+      const int segFontId = seg.isIpa ? IPA_FONT_ID : SETTINGS.getReaderFontId();
       const int segWidth = renderer.getTextWidth(segFontId, seg.text.c_str(), seg.style);
       renderer.drawText(segFontId, x, y, seg.text.c_str(), true, seg.style);
       if ((seg.style & EpdFontFamily::UNDERLINE) != 0) {
@@ -639,12 +640,12 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
         const auto* w = navigator.getWordAt(i);
         if (!w) continue;
         renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
-        renderer.drawText(readerFontId, w->screenX, w->screenY, w->text.c_str(), false, w->style);
+        renderer.drawText(SETTINGS.getReaderFontId(), w->screenX, w->screenY, w->text.c_str(), false, w->style);
       }
     } else {
       if (const auto* sel = navigator.getSelected()) {
         renderer.fillRect(sel->screenX - 2, sel->screenY - 2, sel->width + 4, lineHeight + 4, true);
-        renderer.drawText(readerFontId, sel->screenX, sel->screenY, sel->text.c_str(), false, sel->style);
+        renderer.drawText(SETTINGS.getReaderFontId(), sel->screenX, sel->screenY, sel->text.c_str(), false, sel->style);
       }
     }
     // Empty button hints in word-select mode (same convention as EPUB word-select)

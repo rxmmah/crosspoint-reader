@@ -19,13 +19,12 @@ class DictionaryDefinitionActivity final : public Activity {
   // showLookupButton=false:
   //   Back/Confirm both return to caller (isCancelled=true). Unchanged from old behaviour.
   explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        const std::string& headword, const std::string& definition, int readerFontId,
+                                        const std::string& headword, const std::string& definition,
                                         bool showLookupButton = false, std::string cachePath = "",
                                         int chainStartIndex = 0)
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(headword),
         definition(definition),
-        readerFontId(readerFontId),
         showLookupButton(showLookupButton),
         cachePath(std::move(cachePath)),
         chainStartIndex(chainStartIndex),
@@ -39,7 +38,6 @@ class DictionaryDefinitionActivity final : public Activity {
  private:
   std::string headword;
   std::string definition;
-  int readerFontId;
   bool showLookupButton;
   std::string cachePath;
   int chainStartIndex = 0;

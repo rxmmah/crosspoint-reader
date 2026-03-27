@@ -477,17 +477,15 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           }
         }
       }
-      const int readerFontId = SETTINGS.getReaderFontId();
       const std::string bookCachePath = epub->getCachePath();
       startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
-                                 renderer, mappedInput, std::move(pageForLookup), readerFontId, orientedMarginLeft,
+                                 renderer, mappedInput, std::move(pageForLookup), orientedMarginLeft,
                                  orientedMarginTop, bookCachePath, nextPageFirstWord),
                              [this](const ActivityResult&) { requestUpdate(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::LOOKUP_HISTORY: {
-      startActivityForResult(std::make_unique<LookedUpWordsActivity>(renderer, mappedInput, epub->getCachePath(),
-                                                                     SETTINGS.getReaderFontId()),
+      startActivityForResult(std::make_unique<LookedUpWordsActivity>(renderer, mappedInput, epub->getCachePath()),
                              [this](const ActivityResult&) { requestUpdate(); });
       break;
     }

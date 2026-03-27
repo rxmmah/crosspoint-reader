@@ -8,11 +8,9 @@
 
 class LookedUpWordsActivity final : public Activity {
  public:
-  explicit LookedUpWordsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string cachePath,
-                                 int readerFontId)
+  explicit LookedUpWordsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string cachePath)
       : Activity("LookedUpWords", renderer, mappedInput),
         cachePath(std::move(cachePath)),
-        readerFontId(readerFontId),
         controller(renderer, mappedInput, *this) {}
 
   void onEnter() override;
@@ -22,7 +20,6 @@ class LookedUpWordsActivity final : public Activity {
 
  private:
   std::string cachePath;
-  int readerFontId;
   std::vector<LookupHistory::Entry> entries;
   int selectedIndex = 0;
   bool deleteConfirmMode = false;

@@ -7,6 +7,7 @@
 
 #include <algorithm>
 
+#include "CrossPointSettings.h"
 #include "DictionaryDefinitionActivity.h"
 #include "DictionarySuggestionsActivity.h"
 #include "MappedInputManager.h"
@@ -95,7 +96,7 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
       if (partStart < wordText.size()) splitStarts.push_back(partStart);
 
       if (splitStarts.size() <= 1 && partStart == 0) {
-        int16_t wordWidth = renderer.getTextWidth(fontId, wordText.c_str(), wordStyle);
+        int16_t wordWidth = renderer.getTextWidth(SETTINGS.getReaderFontId(), wordText.c_str(), wordStyle);
         words.push_back({wordText, screenX, screenY, wordWidth, 0, wordStyle});
       } else {
         for (size_t si = 0; si < splitStarts.size(); si++) {
@@ -116,8 +117,8 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
           if (part.empty()) continue;
 
           std::string prefix = wordText.substr(0, start);
-          int16_t offsetX = prefix.empty() ? 0 : renderer.getTextWidth(fontId, prefix.c_str(), wordStyle);
-          int16_t partWidth = renderer.getTextWidth(fontId, part.c_str(), wordStyle);
+          int16_t offsetX = prefix.empty() ? 0 : renderer.getTextWidth(SETTINGS.getReaderFontId(), prefix.c_str(), wordStyle);
+          int16_t partWidth = renderer.getTextWidth(SETTINGS.getReaderFontId(), part.c_str(), wordStyle);
           words.push_back({part, static_cast<int16_t>(screenX + offsetX), screenY, partWidth, 0, wordStyle});
         }
       }
@@ -213,7 +214,7 @@ void DictionaryWordSelectActivity::handleNotFound(const std::string& word) {
   auto similar = Dictionary::findSimilar(word, 6);
   if (!similar.empty()) {
     startActivityForResult(
-        std::make_unique<DictionarySuggestionsActivity>(renderer, mappedInput, std::move(similar), fontId),
+        std::make_unique<DictionarySuggestionsActivity>(renderer, mappedInput, std::move(similar)),
         [this](const ActivityResult& result) {
           if (result.isCancelled) {
             controller.setNotFound();
@@ -224,7 +225,7 @@ void DictionaryWordSelectActivity::handleNotFound(const std::string& word) {
           if (!def.empty()) {
             int chainStart = LookupHistory::addWord(cachePath, wr.word, LookupHistory::Status::Suggestion);
             startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, wr.word, def,
-                                                                                  fontId, true, cachePath, chainStart),
+                                                                                  true, cachePath, chainStart),
                                    [this](const ActivityResult& r) {
                                      if (!r.isCancelled) {
                                        setResult(ActivityResult{});
@@ -264,7 +265,7 @@ void DictionaryWordSelectActivity::loop() {
             LookupHistory::addWord(cachePath, controller.getLookupWord(), toHistStatus(controller.getFoundStatus()));
         startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(
                                    renderer, mappedInput, controller.getFoundWord(), controller.getFoundDefinition(),
-                                   fontId, true, cachePath, chainStart),
+                                   true, cachePath, chainStart),
                                [this](const ActivityResult& result) {
                                  if (!result.isCancelled) {
                                    setResult(ActivityResult{});
@@ -373,9 +374,9 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
   if (controller.render()) return;
 
   // Render the page content
-  page->render(renderer, fontId, marginLeft, marginTop);
+  page->render(renderer, SETTINGS.getReaderFontId(), marginLeft, marginTop);
 
-  const int lineHeight = renderer.getLineHeight(fontId);
+  const int lineHeight = renderer.getLineHeight(SETTINGS.getReaderFontId());
   if (inMultiSelectMode) {
     const int cursorIdx = navigator.getCurrentFlatIndex();
     const int lo = std::min(anchorFlatIndex, cursorIdx);
@@ -384,17 +385,17 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
       const auto* w = navigator.getWordAt(i);
       if (!w) continue;
       renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
-      renderer.drawText(fontId, w->screenX, w->screenY, w->text.c_str(), false, w->style);
+      renderer.drawText(SETTINGS.getReaderFontId(), w->screenX, w->screenY, w->text.c_str(), false, w->style);
     }
   } else {
     if (const auto* w = navigator.getSelected()) {
       renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
-      renderer.drawText(fontId, w->screenX, w->screenY, w->text.c_str(), false, w->style);
+      renderer.drawText(SETTINGS.getReaderFontId(), w->screenX, w->screenY, w->text.c_str(), false, w->style);
 
       // Highlight the other half of a hyphenated word
       if (const auto* other = navigator.getContinuation()) {
         renderer.fillRect(other->screenX - 2, other->screenY - 2, other->width + 4, lineHeight + 4, true);
-        renderer.drawText(fontId, other->screenX, other->screenY, other->text.c_str(), false, other->style);
+        renderer.drawText(SETTINGS.getReaderFontId(), other->screenX, other->screenY, other->text.c_str(), false, other->style);
       }
     }
   }

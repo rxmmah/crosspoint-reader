@@ -7,8 +7,8 @@
 class DictionarySuggestionsActivity final : public Activity {
  public:
   explicit DictionarySuggestionsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                         std::vector<std::string> suggestions, int fontId)
-      : Activity("DictionarySuggestions", renderer, mappedInput), suggestions(std::move(suggestions)), fontId(fontId) {}
+                                         std::vector<std::string> suggestions)
+      : Activity("DictionarySuggestions", renderer, mappedInput), suggestions(std::move(suggestions)) {}
 
   void onEnter() override;
   void loop() override;
@@ -16,6 +16,5 @@ class DictionarySuggestionsActivity final : public Activity {
 
  private:
   std::vector<std::string> suggestions;
-  int fontId;
   int selectedIndex = 0;
 };
