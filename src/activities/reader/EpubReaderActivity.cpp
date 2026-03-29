@@ -479,8 +479,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       }
       const std::string bookCachePath = epub->getCachePath();
       startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
-                                 renderer, mappedInput, std::move(pageForLookup), orientedMarginLeft,
-                                 orientedMarginTop, bookCachePath, nextPageFirstWord),
+                                 renderer, mappedInput, std::move(pageForLookup), orientedMarginLeft, orientedMarginTop,
+                                 bookCachePath, nextPageFirstWord),
                              [this](const ActivityResult&) { requestUpdate(); });
       break;
     }

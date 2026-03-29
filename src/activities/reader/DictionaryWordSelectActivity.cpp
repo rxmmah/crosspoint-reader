@@ -117,7 +117,8 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
           if (part.empty()) continue;
 
           std::string prefix = wordText.substr(0, start);
-          int16_t offsetX = prefix.empty() ? 0 : renderer.getTextWidth(SETTINGS.getReaderFontId(), prefix.c_str(), wordStyle);
+          int16_t offsetX =
+              prefix.empty() ? 0 : renderer.getTextWidth(SETTINGS.getReaderFontId(), prefix.c_str(), wordStyle);
           int16_t partWidth = renderer.getTextWidth(SETTINGS.getReaderFontId(), part.c_str(), wordStyle);
           words.push_back({part, static_cast<int16_t>(screenX + offsetX), screenY, partWidth, 0, wordStyle});
         }
@@ -395,7 +396,8 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
       // Highlight the other half of a hyphenated word
       if (const auto* other = navigator.getContinuation()) {
         renderer.fillRect(other->screenX - 2, other->screenY - 2, other->width + 4, lineHeight + 4, true);
-        renderer.drawText(SETTINGS.getReaderFontId(), other->screenX, other->screenY, other->text.c_str(), false, other->style);
+        renderer.drawText(SETTINGS.getReaderFontId(), other->screenX, other->screenY, other->text.c_str(), false,
+                          other->style);
       }
     }
   }
