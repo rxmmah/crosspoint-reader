@@ -33,3 +33,20 @@
 
 <h2>Test K — Done exits to reader</h2>
 <p>While viewing a chained definition (look up A, then B from A's definition), long-press Back (Done). Expected: exits directly to the EPUB reader, bypassing the history screen and word-select mode.</p>
+
+<h2>Test L — List navigation: wrap-around and paging</h2>
+<p>Verify that the history list supports wrap-around single-step navigation and page-at-a-time navigation.</p>
+<h3>Setup</h3>
+<p>Ensure the history list contains at least two full pages of entries (more entries than fit on one screen). If needed, look up enough distinct words to fill two pages before opening Lookup History.</p>
+<h3>Wrap-around steps</h3>
+<ol>
+<li>Open Lookup History. The cursor is on the first (most recent) entry.</li>
+<li>Press the Previous navigation button once. Expected: the cursor wraps to the <em>last</em> (oldest) entry in the list — it does not stop at the top.</li>
+<li>Press the Next navigation button once. Expected: the cursor wraps back to the <em>first</em> entry.</li>
+</ol>
+<h3>Paging steps</h3>
+<ol>
+<li>With the cursor on the first entry, hold Next (continuous press). Expected: the cursor jumps forward by one page at a time.</li>
+<li>Continue paging past the last entry. Expected: the cursor wraps to the beginning of the list.</li>
+<li>Hold Previous (continuous press). Expected: the cursor pages backward, wrapping from the first entry to the last when it reaches the top.</li>
+</ol>

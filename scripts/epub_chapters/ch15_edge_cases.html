@@ -25,18 +25,25 @@ to exactly the same page position with no layout shift.</p>
 <li>valley</li>
 </ul>
 
-<h2>Test B: Confirm on a non-word shows brief popup</h2>
-<p>Selecting a punctuation mark or number with <em>Confirm</em> must show a brief
-"no word" popup and return to the word-select screen. No lookup must be
-attempted and no crash must occur.</p>
+<h2>Test B: Non-word tokens are filtered or produce no-match</h2>
+<p>Tokens consisting entirely of punctuation (no letters or digits) are filtered
+from the word list and cannot be navigated to. Tokens that contain digits or
+letters but have no dictionary match must produce a not-found result — no crash.</p>
 <h3>Steps</h3>
 <ol>
-<li>Open word select on this page.</li>
-<li>Navigate to a punctuation mark or number (such as a period, hyphen, or
-    the "3." in the list below).</li>
+<li>Open word-select mode on this page.</li>
+<li>Attempt to navigate to a standalone punctuation token (period, hyphen).
+    Verify: such tokens are absent from the word list — you cannot land on them
+    with the navigation buttons.</li>
+<li>Navigate to the "3." list marker below (it contains a digit and remains selectable).</li>
 <li>Press <em>Confirm</em>.</li>
-<li>A brief "no word" popup appears.</li>
-<li>Word-select screen returns. No crash.</li>
+<li>A not-found popup or brief "no word" popup appears. No crash. Word-select screen returns.</li>
+</ol>
+<h3>Items</h3>
+<ol>
+<li>first</li>
+<li>second</li>
+<li>third</li>
 </ol>
 
 <h2>Test C: Dictionary removed mid-session</h2>

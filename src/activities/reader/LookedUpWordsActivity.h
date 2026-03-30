@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "../Activity.h"
+#include "util/ButtonNavigator.h"
 #include "util/DictionaryLookupController.h"
 #include "util/LookupHistory.h"
 
@@ -25,6 +26,7 @@ class LookedUpWordsActivity final : public Activity {
   bool deleteConfirmMode = false;
 
   DictionaryLookupController controller;
+  ButtonNavigator buttonNavigator;
 
   static constexpr unsigned long LONG_PRESS_MS = 600;
 

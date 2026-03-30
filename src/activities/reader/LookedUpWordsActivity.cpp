@@ -124,19 +124,25 @@ void LookedUpWordsActivity::loop() {
     return;
   }
 
-  const bool prevItem = mappedInput.wasReleased(MappedInputManager::Button::Up) ||
-                        mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool nextItem = mappedInput.wasReleased(MappedInputManager::Button::Down) ||
-                        mappedInput.wasReleased(MappedInputManager::Button::Right);
+  const int totalItems = static_cast<int>(entries.size());
+  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
 
-  if (prevItem && selectedIndex > 0) {
-    selectedIndex--;
+  buttonNavigator.onNextRelease([this, totalItems] {
+    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, totalItems);
     requestUpdate();
-  }
-  if (nextItem && selectedIndex < static_cast<int>(entries.size()) - 1) {
-    selectedIndex++;
+  });
+  buttonNavigator.onPreviousRelease([this, totalItems] {
+    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, totalItems);
     requestUpdate();
-  }
+  });
+  buttonNavigator.onNextContinuous([this, totalItems, pageItems] {
+    selectedIndex = ButtonNavigator::nextPageIndex(selectedIndex, totalItems, pageItems);
+    requestUpdate();
+  });
+  buttonNavigator.onPreviousContinuous([this, totalItems, pageItems] {
+    selectedIndex = ButtonNavigator::previousPageIndex(selectedIndex, totalItems, pageItems);
+    requestUpdate();
+  });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {

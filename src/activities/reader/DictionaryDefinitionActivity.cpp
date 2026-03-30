@@ -342,7 +342,6 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
   const int lineHeight = static_cast<int>(renderer.getLineHeight(SETTINGS.getDefinitionFontId()) *
                                           SETTINGS.getDefinitionLineCompression());
   const int indentStep = renderer.getTextWidth(SETTINGS.getDefinitionFontId(), "   ");
-  const int spaceWidth = renderer.getTextWidth(SETTINGS.getDefinitionFontId(), " ");
 
   std::vector<WordSelectNavigator::WordInfo> words;
   std::vector<WordSelectNavigator::Row> rows;
@@ -358,6 +357,8 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
     }
 
     for (const auto& seg : line.segments) {
+      const int segFontId = seg.isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId();
+      const int spaceWidth = renderer.getSpaceWidth(segFontId, seg.style);
       const char* p = seg.text.c_str();
       while (*p) {
         while (*p == ' ') {
@@ -370,14 +371,15 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
         while (*p && *p != ' ') ++p;
         std::string tok(tokStart, p - tokStart);
 
-        const int segFontId = seg.isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId();
-        const int tokWidth = renderer.getTextWidth(segFontId, tok.c_str(), seg.style);
+        const int tokVisualWidth = renderer.getTextWidth(segFontId, tok.c_str(), seg.style);
+        const int tokAdvanceX = renderer.getTextAdvanceX(segFontId, tok.c_str(), seg.style);
         std::string cleaned = Dictionary::cleanWord(tok);
         if (!cleaned.empty()) {
-          words.push_back({tok, static_cast<int16_t>(x), lineY, static_cast<int16_t>(tokWidth), 0, seg.style});
+          words.push_back({tok, static_cast<int16_t>(x), lineY, static_cast<int16_t>(tokVisualWidth), 0, seg.style});
           words.back().lookupText = cleaned;
+          words.back().isIpa = seg.isIpa;
         }
-        x += tokWidth;
+        x += tokAdvanceX;
       }
     }
   }
@@ -625,13 +627,13 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
 
       for (const auto& seg : line.segments) {
         const int segFontId = seg.isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId();
-        const int segWidth = renderer.getTextWidth(segFontId, seg.text.c_str(), seg.style);
         renderer.drawText(segFontId, x, y, seg.text.c_str(), true, seg.style);
         if ((seg.style & EpdFontFamily::UNDERLINE) != 0) {
+          const int segWidth = renderer.getTextWidth(segFontId, seg.text.c_str(), seg.style);
           const int underlineY = y + renderer.getFontAscenderSize(segFontId) + 2;
           renderer.drawLine(x, underlineY, x + segWidth, underlineY, true);
         }
-        x += segWidth;
+        x += renderer.getTextAdvanceX(segFontId, seg.text.c_str(), seg.style);
       }
     }
   };
@@ -646,14 +648,15 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
       for (int i = lo; i <= hi; i++) {
         const auto* w = navigator.getWordAt(i);
         if (!w) continue;
+        const int wFontId = w->isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId();
         renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
-        renderer.drawText(SETTINGS.getDefinitionFontId(), w->screenX, w->screenY, w->text.c_str(), false, w->style);
+        renderer.drawText(wFontId, w->screenX, w->screenY, w->text.c_str(), false, w->style);
       }
     } else {
       if (const auto* sel = navigator.getSelected()) {
+        const int selFontId = sel->isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId();
         renderer.fillRect(sel->screenX - 2, sel->screenY - 2, sel->width + 4, lineHeight + 4, true);
-        renderer.drawText(SETTINGS.getDefinitionFontId(), sel->screenX, sel->screenY, sel->text.c_str(), false,
-                          sel->style);
+        renderer.drawText(selFontId, sel->screenX, sel->screenY, sel->text.c_str(), false, sel->style);
       }
     }
     // Empty button hints in word-select mode (same convention as EPUB word-select)

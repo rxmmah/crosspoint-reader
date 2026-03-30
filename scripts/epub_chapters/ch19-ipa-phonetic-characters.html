@@ -55,3 +55,17 @@ the next line.</p>
 appears cleanly with no trailing filled diamond. Unsupported Greek characters in the
 etymology body render as filled diamonds — this is expected and correct behaviour for
 unsupported scripts.</p>
+
+<h2>Test I: Word-select on an IPA definition</h2>
+<p>Word-select mode must work correctly on a definition that contains IPA characters.
+Highlight boxes must align accurately over the words they represent, including over
+runs of IPA glyphs.</p>
+<h3>Steps</h3>
+<ol>
+<li>Look up <strong>pronunciation</strong>. Definition screen appears with mixed IPA and regular text.</li>
+<li>Press <em>Look Up Word</em> to enter word-select mode.</li>
+<li>Verify the initial highlight is approximately centred in the definition text.</li>
+<li>Navigate through the definition. Verify each highlight box sits directly over its word — no offset for either regular text or IPA character runs.</li>
+<li>Navigate to any regular English word in the definition and press <em>Confirm</em>. A lookup is performed. No crash.</li>
+<li>Long-press <em>Back</em> to return to the reader.</li>
+</ol>

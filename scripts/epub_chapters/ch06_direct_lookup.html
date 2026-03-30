@@ -66,3 +66,26 @@ is set correctly for direct hits.</p>
 <li>Look up any word from Test A.</li>
 <li>Verify <em>Confirm</em> button label is <em>Look Up Word</em>.</li>
 </ol>
+
+<h2>Test E: Initial cursor position in reader word-select</h2>
+<p>When entering word-select mode from the reader, the initially highlighted word
+must be approximately centred on the page — not the first word on the first line.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open word-select mode on this page (press the word-select button from the reader).</li>
+<li>Verify the highlighted word is somewhere in the middle of the visible text, not at the top-left corner.</li>
+<li>Press <em>Back</em> to exit word-select without looking anything up.</li>
+</ol>
+
+<h2>Test F: Word-select overlay alignment with definition font override</h2>
+<p>When the definition font or size differs from the reader font, word-select
+highlights in the definition viewer must still align accurately over the rendered text.</p>
+<h3>Steps</h3>
+<ol>
+<li>Go to Settings &rarr; Reader &rarr; Definition Font Size. Change to a size different from the reader font size.</li>
+<li>Return to this chapter. Look up <em>chronicle</em>.</li>
+<li>Press <em>Look Up Word</em> to enter word-select mode on the definition.</li>
+<li>Navigate to several words. Verify each highlight box is positioned directly over the word it represents — no offset or misalignment.</li>
+<li>Long-press <em>Back</em> to return to the reader.</li>
+<li>Restore Settings &rarr; Reader &rarr; Definition Font Size to its original value.</li>
+</ol>
