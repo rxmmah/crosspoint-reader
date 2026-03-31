@@ -140,7 +140,7 @@ bool DictionaryLookupController::render() {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   if (state == LookupState::LookingUp) {
-    Rect popupLayout = GUI.drawPopup(renderer, tr(STR_LOOKING_UP));
+    Rect popupLayout = GUI.drawPopup(renderer, tr(STR_DICT_LOOKING_UP));
     if (lookupProgress > 0) {
       GUI.fillPopupProgress(renderer, popupLayout, lookupProgress);
     }

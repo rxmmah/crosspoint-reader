@@ -153,16 +153,6 @@ class CrossPointSettings {
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
-  // Lookup history cap options (number of entries kept in lookups.txt)
-  enum LOOKUP_HISTORY_CAP {
-    HIST_25 = 0,
-    HIST_50 = 1,
-    HIST_100 = 2,
-    HIST_200 = 3,
-    HIST_500 = 4,
-    LOOKUP_HISTORY_CAP_COUNT
-  };
-
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Sleep screen cover mode settings
@@ -228,8 +218,8 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
-  // Lookup history entry cap (index into LOOKUP_HISTORY_CAP enum)
-  uint8_t lookupHistoryCap = HIST_100;
+  // Lookup history entry cap (direct value, range 50–250)
+  uint8_t lookupHistoryCap = 100;
 
   ~CrossPointSettings() = default;
 
@@ -242,10 +232,7 @@ class CrossPointSettings {
   int getReaderFontId() const;
   int getDefinitionFontId() const;
   float getDefinitionLineCompression() const;
-  int getLookupHistoryCapValue() const {
-    static constexpr int CAPACITY_VALS[] = {25, 50, 100, 200, 500};
-    return lookupHistoryCap < LOOKUP_HISTORY_CAP_COUNT ? CAPACITY_VALS[lookupHistoryCap] : 100;
-  }
+  int getLookupHistoryCapValue() const { return lookupHistoryCap; }
 
   // If count_only is true, returns the number of settings items that would be written.
   uint8_t writeSettings(FsFile& file, bool count_only = false) const;

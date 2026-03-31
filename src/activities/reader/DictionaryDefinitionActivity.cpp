@@ -20,6 +20,8 @@
 #include "util/IpaUtils.h"
 #include "util/LookupHistory.h"
 
+static constexpr char kBullet[] = "- ";
+
 static LookupHistory::Status toHistStatus(DictionaryLookupController::FoundStatus fs) {
   switch (fs) {
     case DictionaryLookupController::FoundStatus::Direct:
@@ -116,7 +118,7 @@ void DictionaryDefinitionActivity::wrapHtml() {
 
   // Indent step: 3 spaces worth of pixels at regular weight
   const int indentStep = renderer.getTextWidth(SETTINGS.getDefinitionFontId(), "   ");
-  const int bulletWidth = renderer.getTextWidth(SETTINGS.getDefinitionFontId(), tr(STR_DICT_LIST_BULLET));
+  const int bulletWidth = renderer.getTextWidth(SETTINGS.getDefinitionFontId(), kBullet);
 
   // Heap-allocate the renderer — textBuf[8192] is too large for the stack
   auto htmlRenderer = std::make_unique<DictHtmlRenderer>();
@@ -364,7 +366,7 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
     int x = leftPadding + line.indentLevel * indentStep;
 
     if (line.isListItem) {
-      x += renderer.getTextWidth(SETTINGS.getDefinitionFontId(), tr(STR_DICT_LIST_BULLET));
+      x += renderer.getTextWidth(SETTINGS.getDefinitionFontId(), kBullet);
     }
 
     for (const auto& seg : line.segments) {
@@ -643,8 +645,8 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
       int x = leftPadding + line.indentLevel * indentStep;
 
       if (line.isListItem) {
-        renderer.drawText(SETTINGS.getDefinitionFontId(), x, y, tr(STR_DICT_LIST_BULLET));
-        x += renderer.getTextWidth(SETTINGS.getDefinitionFontId(), tr(STR_DICT_LIST_BULLET));
+        renderer.drawText(SETTINGS.getDefinitionFontId(), x, y, kBullet);
+        x += renderer.getTextWidth(SETTINGS.getDefinitionFontId(), kBullet);
       }
 
       for (const auto& seg : line.segments) {
