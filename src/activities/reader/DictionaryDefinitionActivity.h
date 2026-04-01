@@ -73,12 +73,8 @@ class DictionaryDefinitionActivity final : public Activity {
 
   // Word-select mode (activated by pressing Look Up Word in view mode)
   bool isWordSelectMode = false;
-  bool inMultiSelectMode = false;
-  int anchorFlatIndex = -1;
   WordSelectNavigator navigator;
   DictionaryLookupController controller;
-
-  static constexpr unsigned long LONG_PRESS_MS = 600;
 
   bool skipLoopDelay() override { return controller.skipLoopDelay(); }
 
@@ -87,5 +83,4 @@ class DictionaryDefinitionActivity final : public Activity {
   void wrapPlain();
   void extractWordsFromLayout();
   void handleNotFound(const std::string& word);
-  std::string buildPhraseFromRange(int fromIdx, int toIdx) const;
 };

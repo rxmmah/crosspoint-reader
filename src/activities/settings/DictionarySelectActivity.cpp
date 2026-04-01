@@ -328,47 +328,19 @@ void DictionarySelectActivity::loop() {
       return;
     }
 
-    // For a real dictionary entry, check whether any preparation steps are required
-    // (extraction of compressed files, generation of .oft index files).
+    // For a real dictionary entry, delegate preparation check to DictPrepareActivity.
+    // It detects required steps and either runs them or exits immediately if none are needed.
     if (selectedIndex > 0) {
       std::string folder = folderForIndex(selectedIndex);
-
-      // Reuse a single path buffer for all existence checks — 7 x char[520] simultaneously
-      // would overflow the loopTask stack (3640 bytes of locals in one frame).
-      char pathBuf[520];
-
-      snprintf(pathBuf, sizeof(pathBuf), "%s.dict", folder.c_str());
-      const bool dictExists = Storage.exists(pathBuf);
-      snprintf(pathBuf, sizeof(pathBuf), "%s.dict.dz", folder.c_str());
-      const bool dictDzExists = Storage.exists(pathBuf);
-      snprintf(pathBuf, sizeof(pathBuf), "%s.idx", folder.c_str());
-      const bool idxExists = Storage.exists(pathBuf);
-      snprintf(pathBuf, sizeof(pathBuf), "%s.idx.oft", folder.c_str());
-      const bool idxOftExists = Storage.exists(pathBuf);
-      snprintf(pathBuf, sizeof(pathBuf), "%s.syn", folder.c_str());
-      const bool synExists = Storage.exists(pathBuf);
-      snprintf(pathBuf, sizeof(pathBuf), "%s.syn.dz", folder.c_str());
-      const bool synDzExists = Storage.exists(pathBuf);
-      snprintf(pathBuf, sizeof(pathBuf), "%s.syn.oft", folder.c_str());
-      const bool synOftExists = Storage.exists(pathBuf);
-
-      const bool needsExtractDict = !dictExists && dictDzExists;
-      const bool needsExtractSyn = !synExists && synDzExists;
-      const bool needsGenIdx = idxExists && !idxOftExists;
-      const bool synWillExist = synExists || synDzExists;
-      const bool needsGenSyn = synWillExist && !synOftExists;
-
-      if (needsExtractDict || needsExtractSyn || needsGenIdx || needsGenSyn) {
-        startActivityForResult(std::make_unique<DictPrepareActivity>(renderer, mappedInput, folder),
-                               [this](const ActivityResult& result) {
-                                 if (!result.isCancelled) {
-                                   applySelection();
-                                   finish();
-                                 }
-                                 // Cancelled/failed: stay in picker with the same highlighted index.
-                               });
-        return;
-      }
+      startActivityForResult(std::make_unique<DictPrepareActivity>(renderer, mappedInput, folder),
+                             [this](const ActivityResult& result) {
+                               if (!result.isCancelled) {
+                                 applySelection();
+                                 finish();
+                               }
+                               // Cancelled/failed: stay in picker with the same highlighted index.
+                             });
+      return;
     }
 
     applySelection();

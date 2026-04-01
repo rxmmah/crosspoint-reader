@@ -12,8 +12,9 @@ class MappedInputManager;
 
 // Orientation-aware word-selection navigator.
 // Holds a flat list of on-screen words organised into rows and tracks the
-// currently highlighted word.  Does NOT handle Confirm or Back — the calling
-// activity owns those buttons.
+// currently highlighted word.  handleNavigation() processes directional input;
+// handleMultiSelectInput() processes Confirm/Back for multi-word selection.
+// The calling activity owns single-select Confirm/Back and activity-specific logic.
 class WordSelectNavigator {
  public:
   struct WordInfo {
@@ -29,6 +30,7 @@ class WordSelectNavigator {
     int continuationOf = -1;     // index of hyphenated first half (EPUB only)
     EpdFontFamily::Style style = EpdFontFamily::REGULAR;
     bool isIpa = false;
+    int fontId = 0;  // resolved at extraction time; used by renderHighlight()
   };
 
   struct Row {
@@ -72,6 +74,34 @@ class WordSelectNavigator {
   // Total word count.
   int getWordCount() const { return static_cast<int>(words.size()); }
 
+  // Join display text of words in range [fromIdx, toIdx] (inclusive, either order).
+  // Returns raw joined string; caller should apply Dictionary::cleanWord() if needed.
+  std::string buildPhrase(int fromIdx, int toIdx) const;
+
+  // --- Multi-select support (shared by WordSelect and Definition activities) ---
+
+  enum class MultiSelectAction { None, Consumed, PhraseReady, ExitedMultiSelect, EnteredMultiSelect };
+
+  bool isMultiSelecting() const { return inMultiSelectMode; }
+  void exitMultiSelect() {
+    inMultiSelectMode = false;
+    anchorFlatIndex = -1;
+  }
+
+  // Process Confirm/Back for multi-select state machine.
+  // Returns PhraseReady when a phrase range is confirmed (raw phrase in outPhrase).
+  // Returns EnteredMultiSelect on long-press Confirm that enters multi-select.
+  // Returns Consumed when a long-press was detected but no valid word (caller should return).
+  // Returns ExitedMultiSelect on Back during multi-select.
+  // Returns None when no multi-select-relevant input occurred.
+  MultiSelectAction handleMultiSelectInput(const MappedInputManager& input, std::string& outPhrase,
+                                           unsigned long longPressMs = 600);
+
+  // Draw inverted highlight for selected word(s).  Uses WordInfo::fontId.
+  // In multi-select: highlights the anchor..cursor range.
+  // In single-select: highlights the cursor word (+ hyphenated continuation if any).
+  void renderHighlight(const GfxRenderer& renderer, int lineHeight) const;
+
   void reset();
 
  private:
@@ -80,6 +110,8 @@ class WordSelectNavigator {
   std::string textPool;
   int currentRow = 0;
   int currentWordInRow = 0;
+  bool inMultiSelectMode = false;
+  int anchorFlatIndex = -1;
 
   int findClosestWord(int targetRow) const;
 };

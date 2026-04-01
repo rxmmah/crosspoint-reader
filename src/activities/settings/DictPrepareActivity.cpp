@@ -91,6 +91,13 @@ void DictPrepareActivity::onEnter() {
   }
 
   detectSteps();
+
+  // No preparation needed — signal success immediately.
+  if (stepCount == 0) {
+    finish();
+    return;
+  }
+
   requestUpdate();
 }
 

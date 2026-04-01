@@ -46,11 +46,4 @@ class DictionaryWordSelectActivity final : public Activity {
   void mergeHyphenatedWords(std::vector<WordSelectNavigator::WordInfo>& words,
                             std::vector<WordSelectNavigator::Row>& rows, std::string& textPool);
   void handleNotFound(const std::string& word);
-
-  // Multi-word select state
-  bool inMultiSelectMode = false;
-  int anchorFlatIndex = -1;
-  static constexpr unsigned long LONG_PRESS_MS = 600;
-
-  std::string buildPhraseFromRange(int fromIdx, int toIdx) const;
 };

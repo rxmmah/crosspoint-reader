@@ -4,6 +4,8 @@
 
 #include <string>
 
+#include "LookupHistory.h"
+
 class Activity;
 class GfxRenderer;
 class MappedInputManager;
@@ -27,6 +29,22 @@ class DictionaryLookupController {
 
   // How the word was ultimately resolved when FoundDefinition fires.
   enum class FoundStatus { Direct, Stem, AltForm, Suggestion };
+
+  // Convert FoundStatus to LookupHistory::Status for history recording.
+  static LookupHistory::Status toHistStatus(FoundStatus fs) {
+    switch (fs) {
+      case FoundStatus::Direct:
+        return LookupHistory::Status::Direct;
+      case FoundStatus::Stem:
+        return LookupHistory::Status::Stem;
+      case FoundStatus::AltForm:
+        return LookupHistory::Status::AltForm;
+      case FoundStatus::Suggestion:
+        return LookupHistory::Status::Suggestion;
+      default:
+        return LookupHistory::Status::NotFound;
+    }
+  }
 
   DictionaryLookupController(GfxRenderer& renderer, MappedInputManager& mappedInput, Activity& owner,
                              std::string cachePath = "");

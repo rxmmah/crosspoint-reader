@@ -11,21 +11,6 @@
 #include "fontIds.h"
 #include "util/LookupHistory.h"
 
-static LookupHistory::Status toHistStatus(DictionaryLookupController::FoundStatus fs) {
-  switch (fs) {
-    case DictionaryLookupController::FoundStatus::Direct:
-      return LookupHistory::Status::Direct;
-    case DictionaryLookupController::FoundStatus::Stem:
-      return LookupHistory::Status::Stem;
-    case DictionaryLookupController::FoundStatus::AltForm:
-      return LookupHistory::Status::AltForm;
-    case DictionaryLookupController::FoundStatus::Suggestion:
-      return LookupHistory::Status::Suggestion;
-    default:
-      return LookupHistory::Status::NotFound;
-  }
-}
-
 const char* LookedUpWordsActivity::glyphFor(LookupHistory::Status s) {
   switch (s) {
     case LookupHistory::Status::Direct:
@@ -59,7 +44,8 @@ void LookedUpWordsActivity::loop() {
     switch (controller.handleInput()) {
       case DictionaryLookupController::LookupEvent::FoundDefinition: {
         const int chainStart =
-            LookupHistory::addWord(cachePath, controller.getLookupWord(), toHistStatus(controller.getFoundStatus()));
+            LookupHistory::addWord(cachePath, controller.getLookupWord(),
+                                   DictionaryLookupController::toHistStatus(controller.getFoundStatus()));
         startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(
                                    renderer, mappedInput, controller.getFoundWord(), controller.getFoundDefinition(),
                                    true, cachePath, chainStart),

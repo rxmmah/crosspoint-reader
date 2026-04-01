@@ -21,21 +21,7 @@
 #include "util/LookupHistory.h"
 
 static constexpr char kBullet[] = "- ";
-
-static LookupHistory::Status toHistStatus(DictionaryLookupController::FoundStatus fs) {
-  switch (fs) {
-    case DictionaryLookupController::FoundStatus::Direct:
-      return LookupHistory::Status::Direct;
-    case DictionaryLookupController::FoundStatus::Stem:
-      return LookupHistory::Status::Stem;
-    case DictionaryLookupController::FoundStatus::AltForm:
-      return LookupHistory::Status::AltForm;
-    case DictionaryLookupController::FoundStatus::Suggestion:
-      return LookupHistory::Status::Suggestion;
-    default:
-      return LookupHistory::Status::NotFound;
-  }
-}
+static constexpr unsigned long LONG_PRESS_MS = 600;
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
@@ -52,25 +38,10 @@ void DictionaryDefinitionActivity::onExit() {
 // Layout helpers — shared setup
 // ---------------------------------------------------------------------------
 
-std::string DictionaryDefinitionActivity::buildPhraseFromRange(int fromIdx, int toIdx) const {
-  const int lo = std::min(fromIdx, toIdx);
-  const int hi = std::max(fromIdx, toIdx);
-  std::string phrase;
-  for (int i = lo; i <= hi; i++) {
-    const auto* w = navigator.getWordAt(i);
-    if (!w) continue;
-    if (!phrase.empty()) phrase += ' ';
-    phrase += navigator.getDisplay(*w);
-  }
-  return Dictionary::cleanWord(phrase);
-}
-
 void DictionaryDefinitionActivity::wrapText() {
   layoutLines.clear();
   layoutLines.reserve(32);
   isWordSelectMode = false;
-  inMultiSelectMode = false;
-  anchorFlatIndex = -1;
   navigator.reset();
 
   const auto orient = renderer.getOrientation();
@@ -401,6 +372,7 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
           wi.width = static_cast<int16_t>(tokVisualWidth);
           wi.style = seg.style;
           wi.isIpa = seg.isIpa;
+          wi.fontId = segFontId;
           words.push_back(wi);
         }
         x += tokAdvanceX;
@@ -464,7 +436,8 @@ void DictionaryDefinitionActivity::loop() {
     switch (controller.handleInput()) {
       case DictionaryLookupController::LookupEvent::FoundDefinition:
         if (!cachePath.empty() && !chainBackNavInProgress) {
-          LookupHistory::addWord(cachePath, controller.getLookupWord(), toHistStatus(controller.getFoundStatus()));
+          LookupHistory::addWord(cachePath, controller.getLookupWord(),
+                                 DictionaryLookupController::toHistStatus(controller.getFoundStatus()));
           chainDepth++;
         }
         chainBackNavInProgress = false;
@@ -487,7 +460,6 @@ void DictionaryDefinitionActivity::loop() {
         break;
       case DictionaryLookupController::LookupEvent::Cancelled:
         isWordSelectMode = false;
-        inMultiSelectMode = false;
         navigator.reset();
         requestUpdate();
         break;
@@ -503,58 +475,49 @@ void DictionaryDefinitionActivity::loop() {
       requestUpdate();
     }
 
-    if (inMultiSelectMode) {
-      if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-        const int cursorIdx = navigator.getCurrentFlatIndex();
-        std::string phrase = buildPhraseFromRange(anchorFlatIndex, cursorIdx);
-        if (phrase.empty()) {
-          GUI.drawPopup(renderer, tr(STR_DICT_NO_WORD));
-          renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-          vTaskDelay(1000 / portTICK_PERIOD_MS);
-          requestUpdate();
+    std::string msPhrase;
+    const auto msAction = navigator.handleMultiSelectInput(mappedInput, msPhrase);
+    if (msAction != WordSelectNavigator::MultiSelectAction::None) {
+      switch (msAction) {
+        case WordSelectNavigator::MultiSelectAction::PhraseReady: {
+          std::string cleaned = Dictionary::cleanWord(msPhrase);
+          if (cleaned.empty()) {
+            GUI.drawPopup(renderer, tr(STR_DICT_NO_WORD));
+            renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            requestUpdate();
+          } else {
+            controller.startLookup(cleaned);
+          }
           return;
         }
-        inMultiSelectMode = false;
-        controller.startLookup(phrase);
+        case WordSelectNavigator::MultiSelectAction::ExitedMultiSelect:
+        case WordSelectNavigator::MultiSelectAction::EnteredMultiSelect:
+          requestUpdate();
+          return;
+        default:
+          return;
+      }
+    }
+
+    if (!navigator.isMultiSelecting()) {
+      if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+        const auto* sel = navigator.getSelected();
+        if (!sel) return;
+        if (sel->lookupLen == 0) return;
+        controller.startLookup(navigator.getLookup(*sel));
         return;
       }
 
       if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-        inMultiSelectMode = false;
-        requestUpdate();
-        return;
-      }
-      return;
-    }
-
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
-        const int flatIdx = navigator.getCurrentFlatIndex();
-        if (flatIdx >= 0) {
-          inMultiSelectMode = true;
-          anchorFlatIndex = flatIdx;
+        if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+          setResult(ActivityResult{});
+          finish();
+        } else {
+          isWordSelectMode = false;
+          navigator.reset();
           requestUpdate();
         }
-        return;
-      }
-      const auto* sel = navigator.getSelected();
-      if (!sel) return;
-      if (sel->lookupLen == 0) return;
-      controller.startLookup(navigator.getLookup(*sel));
-      return;
-    }
-
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
-        // Long press — Done: exit all the way to reader
-        setResult(ActivityResult{});
-        finish();
-      } else {
-        // Short press — exit word-select, return to definition view
-        isWordSelectMode = false;
-        inMultiSelectMode = false;
-        navigator.reset();
-        requestUpdate();
       }
     }
     return;
@@ -665,24 +628,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
 
   // Word-select mode: overlay highlighted word(s)
   if (isWordSelectMode) {
-    if (inMultiSelectMode) {
-      const int cursorIdx = navigator.getCurrentFlatIndex();
-      const int lo = std::min(anchorFlatIndex, cursorIdx);
-      const int hi = std::max(anchorFlatIndex, cursorIdx);
-      for (int i = lo; i <= hi; i++) {
-        const auto* w = navigator.getWordAt(i);
-        if (!w) continue;
-        const int wFontId = w->isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId();
-        renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
-        renderer.drawText(wFontId, w->screenX, w->screenY, navigator.getDisplay(*w), false, w->style);
-      }
-    } else {
-      if (const auto* sel = navigator.getSelected()) {
-        const int selFontId = sel->isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId();
-        renderer.fillRect(sel->screenX - 2, sel->screenY - 2, sel->width + 4, lineHeight + 4, true);
-        renderer.drawText(selFontId, sel->screenX, sel->screenY, navigator.getDisplay(*sel), false, sel->style);
-      }
-    }
+    navigator.renderHighlight(renderer, lineHeight);
     // Empty button hints in word-select mode (same convention as EPUB word-select)
     const auto labels = mappedInput.mapLabels("", "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

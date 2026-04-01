@@ -30,6 +30,8 @@ void WordSelectNavigator::reset() {
   textPool.clear();
   currentRow = 0;
   currentWordInRow = 0;
+  inMultiSelectMode = false;
+  anchorFlatIndex = -1;
 }
 
 const WordSelectNavigator::WordInfo* WordSelectNavigator::getSelected() const {
@@ -61,6 +63,19 @@ int WordSelectNavigator::getCurrentFlatIndex() const {
 const WordSelectNavigator::WordInfo* WordSelectNavigator::getWordAt(int idx) const {
   if (idx < 0 || idx >= static_cast<int>(words.size())) return nullptr;
   return &words[idx];
+}
+
+std::string WordSelectNavigator::buildPhrase(int fromIdx, int toIdx) const {
+  const int lo = std::min(fromIdx, toIdx);
+  const int hi = std::max(fromIdx, toIdx);
+  std::string phrase;
+  for (int i = lo; i <= hi; i++) {
+    const auto* w = getWordAt(i);
+    if (!w) continue;
+    if (!phrase.empty()) phrase += ' ';
+    phrase += getDisplay(*w);
+  }
+  return phrase;
 }
 
 int WordSelectNavigator::findClosestWord(int targetRow) const {
@@ -152,4 +167,60 @@ bool WordSelectNavigator::handleNavigation(const MappedInputManager& input, cons
   }
 
   return changed;
+}
+
+WordSelectNavigator::MultiSelectAction WordSelectNavigator::handleMultiSelectInput(const MappedInputManager& input,
+                                                                                   std::string& outPhrase,
+                                                                                   unsigned long longPressMs) {
+  if (inMultiSelectMode) {
+    if (input.wasReleased(MappedInputManager::Button::Confirm)) {
+      const int cursorIdx = getCurrentFlatIndex();
+      outPhrase = buildPhrase(anchorFlatIndex, cursorIdx);
+      inMultiSelectMode = false;
+      return MultiSelectAction::PhraseReady;
+    }
+    if (input.wasReleased(MappedInputManager::Button::Back)) {
+      inMultiSelectMode = false;
+      return MultiSelectAction::ExitedMultiSelect;
+    }
+    return MultiSelectAction::None;
+  }
+
+  if (input.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (input.getHeldTime() >= longPressMs) {
+      const int flatIdx = getCurrentFlatIndex();
+      if (flatIdx >= 0) {
+        inMultiSelectMode = true;
+        anchorFlatIndex = flatIdx;
+        return MultiSelectAction::EnteredMultiSelect;
+      }
+      return MultiSelectAction::Consumed;
+    }
+  }
+
+  return MultiSelectAction::None;
+}
+
+void WordSelectNavigator::renderHighlight(const GfxRenderer& renderer, int lineHeight) const {
+  if (inMultiSelectMode) {
+    const int cursorIdx = getCurrentFlatIndex();
+    const int lo = std::min(anchorFlatIndex, cursorIdx);
+    const int hi = std::max(anchorFlatIndex, cursorIdx);
+    for (int i = lo; i <= hi; i++) {
+      const auto* w = getWordAt(i);
+      if (!w) continue;
+      renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
+      renderer.drawText(w->fontId, w->screenX, w->screenY, getDisplay(*w), false, w->style);
+    }
+  } else {
+    const auto* sel = getSelected();
+    if (!sel) return;
+    renderer.fillRect(sel->screenX - 2, sel->screenY - 2, sel->width + 4, lineHeight + 4, true);
+    renderer.drawText(sel->fontId, sel->screenX, sel->screenY, getDisplay(*sel), false, sel->style);
+    const auto* other = getContinuation();
+    if (other) {
+      renderer.fillRect(other->screenX - 2, other->screenY - 2, other->width + 4, lineHeight + 4, true);
+      renderer.drawText(other->fontId, other->screenX, other->screenY, getDisplay(*other), false, other->style);
+    }
+  }
 }

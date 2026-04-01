@@ -16,21 +16,6 @@
 #include "util/Dictionary.h"
 #include "util/LookupHistory.h"
 
-static LookupHistory::Status toHistStatus(DictionaryLookupController::FoundStatus fs) {
-  switch (fs) {
-    case DictionaryLookupController::FoundStatus::Direct:
-      return LookupHistory::Status::Direct;
-    case DictionaryLookupController::FoundStatus::Stem:
-      return LookupHistory::Status::Stem;
-    case DictionaryLookupController::FoundStatus::AltForm:
-      return LookupHistory::Status::AltForm;
-    case DictionaryLookupController::FoundStatus::Suggestion:
-      return LookupHistory::Status::Suggestion;
-    default:
-      return LookupHistory::Status::NotFound;
-  }
-}
-
 void DictionaryWordSelectActivity::onEnter() {
   Activity::onEnter();
   std::vector<WordSelectNavigator::WordInfo> words;
@@ -113,6 +98,7 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
           wi.screenY = screenY;
           wi.width = wordWidth;
           wi.style = wordStyle;
+          wi.fontId = SETTINGS.getReaderFontId();
           words.push_back(wi);
         }
       } else {
@@ -148,6 +134,7 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
             wi.screenY = screenY;
             wi.width = partWidth;
             wi.style = wordStyle;
+            wi.fontId = SETTINGS.getReaderFontId();
             words.push_back(wi);
           }
         }
@@ -284,25 +271,12 @@ void DictionaryWordSelectActivity::handleNotFound(const std::string& word) {
   controller.setNotFound();
 }
 
-std::string DictionaryWordSelectActivity::buildPhraseFromRange(int fromIdx, int toIdx) const {
-  const int lo = std::min(fromIdx, toIdx);
-  const int hi = std::max(fromIdx, toIdx);
-  std::string phrase;
-  for (int i = lo; i <= hi; i++) {
-    const auto* w = navigator.getWordAt(i);
-    if (!w) continue;
-    if (!phrase.empty()) phrase += ' ';
-    phrase += navigator.getDisplay(*w);
-  }
-  return Dictionary::cleanWord(phrase);
-}
-
 void DictionaryWordSelectActivity::loop() {
   if (controller.isActive()) {
     switch (controller.handleInput()) {
       case DictionaryLookupController::LookupEvent::FoundDefinition: {
-        int chainStart =
-            LookupHistory::addWord(cachePath, controller.getLookupWord(), toHistStatus(controller.getFoundStatus()));
+        int chainStart = LookupHistory::addWord(cachePath, controller.getLookupWord(),
+                                                DictionaryLookupController::toHistStatus(controller.getFoundStatus()));
         startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(
                                    renderer, mappedInput, controller.getFoundWord(), controller.getFoundDefinition(),
                                    true, cachePath, chainStart),
@@ -349,41 +323,34 @@ void DictionaryWordSelectActivity::loop() {
     requestUpdate();
   }
 
-  if (inMultiSelectMode) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      const int cursorIdx = navigator.getCurrentFlatIndex();
-      std::string phrase = buildPhraseFromRange(anchorFlatIndex, cursorIdx);
-      if (phrase.empty()) {
-        GUI.drawPopup(renderer, tr(STR_DICT_NO_WORD));
-        renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-        requestUpdate();
+  std::string msPhrase;
+  const auto msAction = navigator.handleMultiSelectInput(mappedInput, msPhrase);
+  if (msAction != WordSelectNavigator::MultiSelectAction::None) {
+    switch (msAction) {
+      case WordSelectNavigator::MultiSelectAction::PhraseReady: {
+        std::string cleaned = Dictionary::cleanWord(msPhrase);
+        if (cleaned.empty()) {
+          GUI.drawPopup(renderer, tr(STR_DICT_NO_WORD));
+          renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+          vTaskDelay(1000 / portTICK_PERIOD_MS);
+          requestUpdate();
+        } else {
+          controller.startLookup(cleaned);
+        }
         return;
       }
-      inMultiSelectMode = false;
-      controller.startLookup(phrase);
-      return;
+      case WordSelectNavigator::MultiSelectAction::ExitedMultiSelect:
+      case WordSelectNavigator::MultiSelectAction::EnteredMultiSelect:
+        requestUpdate();
+        return;
+      default:
+        return;
     }
-
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      inMultiSelectMode = false;
-      requestUpdate();
-      return;
-    }
-    return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
-      const int flatIdx = navigator.getCurrentFlatIndex();
-      if (flatIdx >= 0) {
-        inMultiSelectMode = true;
-        anchorFlatIndex = flatIdx;
-        requestUpdate();
-      }
-      return;
-    }
+  if (navigator.isMultiSelecting()) return;
 
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const auto* sel = navigator.getSelected();
     if (!sel) return;
     std::string cleaned = Dictionary::cleanWord(navigator.getLookup(*sel));
@@ -417,29 +384,7 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
   page->render(renderer, SETTINGS.getReaderFontId(), marginLeft, marginTop);
 
   const int lineHeight = renderer.getLineHeight(SETTINGS.getReaderFontId());
-  if (inMultiSelectMode) {
-    const int cursorIdx = navigator.getCurrentFlatIndex();
-    const int lo = std::min(anchorFlatIndex, cursorIdx);
-    const int hi = std::max(anchorFlatIndex, cursorIdx);
-    for (int i = lo; i <= hi; i++) {
-      const auto* w = navigator.getWordAt(i);
-      if (!w) continue;
-      renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
-      renderer.drawText(SETTINGS.getReaderFontId(), w->screenX, w->screenY, navigator.getDisplay(*w), false, w->style);
-    }
-  } else {
-    if (const auto* w = navigator.getSelected()) {
-      renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
-      renderer.drawText(SETTINGS.getReaderFontId(), w->screenX, w->screenY, navigator.getDisplay(*w), false, w->style);
-
-      // Highlight the other half of a hyphenated word
-      if (const auto* other = navigator.getContinuation()) {
-        renderer.fillRect(other->screenX - 2, other->screenY - 2, other->width + 4, lineHeight + 4, true);
-        renderer.drawText(SETTINGS.getReaderFontId(), other->screenX, other->screenY, navigator.getDisplay(*other),
-                          false, other->style);
-      }
-    }
-  }
+  navigator.renderHighlight(renderer, lineHeight);
 
   const auto labels = mappedInput.mapLabels("", "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
