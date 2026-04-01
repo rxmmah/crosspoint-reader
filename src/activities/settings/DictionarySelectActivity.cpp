@@ -145,8 +145,7 @@ void DictionarySelectActivity::scanDictionaries() {
 
   root.rewindDirectory();
 
-  // FAT32 long filenames are max 255 chars; 256 is sufficient for bare names (not full paths).
-  char name[256];
+  char name[500];
   for (auto entry = root.openNextFile(); entry; entry = root.openNextFile()) {
     entry.getName(name, sizeof(name));
 
@@ -157,19 +156,19 @@ void DictionarySelectActivity::scanDictionaries() {
 
     // Scan the subdirectory for .idx and .ifo files.
     // Folders with multiple .idx or multiple .ifo files are ambiguous and skipped.
-    char subPath[520];
-    snprintf(subPath, sizeof(subPath), "%s/%s", dictRoot.c_str(), name);
+    std::string subPath = dictRoot + "/" + name;
     entry.close();
 
-    auto subDir = Storage.open(subPath);
+    auto subDir = Storage.open(subPath.c_str());
     if (!subDir || !subDir.isDirectory()) {
       if (subDir) subDir.close();
       continue;
     }
 
     subDir.rewindDirectory();
-    char subName[256];  // bare filename, not full path — 256 is sufficient for FAT32
-    char foundStem[256] = "";
+    char subName[500];
+    char foundStem[500];
+    foundStem[0] = '\0';
     bool ambiguous = false;
     int ifoCount = 0;
     for (auto subEntry = subDir.openNextFile(); subEntry; subEntry = subDir.openNextFile()) {
@@ -246,12 +245,7 @@ void DictionarySelectActivity::scanDictionaries() {
 
 std::string DictionarySelectActivity::folderForIndex(int index) const {
   if (index <= 0 || index > static_cast<int>(dictFolders.size())) return "";
-  // Returns the full base path: <dictRoot>/<folder>/<stem>
-  // All file access appends an extension to this (e.g. basePath + ".idx").
-  static char fullPath[520];
-  snprintf(fullPath, sizeof(fullPath), "%s/%s/%s", dictRoot.c_str(), dictFolders[index - 1].c_str(),
-           dictStems[index - 1].c_str());
-  return std::string(fullPath);
+  return dictRoot + "/" + dictFolders[index - 1] + "/" + dictStems[index - 1];
 }
 
 const char* DictionarySelectActivity::nameForIndex(int index) const {

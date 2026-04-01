@@ -215,36 +215,27 @@ void DictPrepareActivity::runSteps() {
     steps[i].status = StepStatus::IN_PROGRESS;
     requestUpdate(true);
 
-    char srcPath[520], dstPath[520];
     bool ok = false;
 
     switch (steps[i].type) {
       case StepType::EXTRACT_DICT:
-        snprintf(srcPath, sizeof(srcPath), "%s.dict.dz", folderPath.c_str());
-        snprintf(dstPath, sizeof(dstPath), "%s.dict", folderPath.c_str());
-        ok = extractFile(srcPath, dstPath, steps[i]);
-        if (!ok) Storage.remove(dstPath);
+        ok = extractFile((folderPath + ".dict.dz").c_str(), (folderPath + ".dict").c_str(), steps[i]);
+        if (!ok) Storage.remove((folderPath + ".dict").c_str());
         break;
 
       case StepType::EXTRACT_SYN:
-        snprintf(srcPath, sizeof(srcPath), "%s.syn.dz", folderPath.c_str());
-        snprintf(dstPath, sizeof(dstPath), "%s.syn", folderPath.c_str());
-        ok = extractFile(srcPath, dstPath, steps[i]);
-        if (!ok) Storage.remove(dstPath);
+        ok = extractFile((folderPath + ".syn.dz").c_str(), (folderPath + ".syn").c_str(), steps[i]);
+        if (!ok) Storage.remove((folderPath + ".syn").c_str());
         break;
 
       case StepType::GEN_IDX:
-        snprintf(srcPath, sizeof(srcPath), "%s.idx", folderPath.c_str());
-        snprintf(dstPath, sizeof(dstPath), "%s.idx.oft", folderPath.c_str());
-        ok = generateOft(srcPath, dstPath, 8, steps[i]);  // .idx: 4-byte offset + 4-byte size
-        if (!ok) Storage.remove(dstPath);
+        ok = generateOft((folderPath + ".idx").c_str(), (folderPath + ".idx.oft").c_str(), 8, steps[i]);
+        if (!ok) Storage.remove((folderPath + ".idx.oft").c_str());
         break;
 
       case StepType::GEN_SYN:
-        snprintf(srcPath, sizeof(srcPath), "%s.syn", folderPath.c_str());
-        snprintf(dstPath, sizeof(dstPath), "%s.syn.oft", folderPath.c_str());
-        ok = generateOft(srcPath, dstPath, 4, steps[i]);  // .syn: 4-byte original_word_index
-        if (!ok) Storage.remove(dstPath);
+        ok = generateOft((folderPath + ".syn").c_str(), (folderPath + ".syn.oft").c_str(), 4, steps[i]);
+        if (!ok) Storage.remove((folderPath + ".syn.oft").c_str());
         break;
     }
 
