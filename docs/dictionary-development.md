@@ -198,6 +198,10 @@ python3 scripts/dictionary_coverage_check.py test/dictionaries/english-full test
 python3 scripts/dictionary_coverage_check.py --syn test/dictionaries/english-full test/epubs/test_dictionary.epub
 ```
 
+## Known Limitations
+
+**Multi-word selection cannot span page boundaries.** Words on the next page are not loaded into memory, so extending a multi-word selection past the last word on the current page is not possible. Workaround: reduce the reader font size so that more words fit on a single page, perform the phrase lookup, then restore the original font size. A complete fix would require significant changes to the rendering engine and is out of scope for the dictionary feature.
+
 ## Naming Conventions
 
 - Dictionary folder names use lowercase hyphenated: `english-full`, `prep-gen-idx`

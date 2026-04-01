@@ -1,15 +1,16 @@
 <h1>18. ExpAT HTML Renderer Tests</h1>
 
 <p>This chapter tests the expat-based HTML renderer used to display dictionary
-definitions. Set the active dictionary to <em>html-definitions</em> before starting.</p>
+definitions. There are seven tests, one per lookup word. Each test describes
+what you should see on the definition screen.</p>
+<h3>Dictionary</h3>
+<p><em>html-definitions</em></p>
+<h3>Note</h3>
+<p>Do not use <em>html-definitions</em> for any other chapter in this book.</p>
 
-<p>There are seven tests, one per lookup word. Each test describes what you should
-see on the definition screen. Do not use <em>html-definitions</em> for any other chapter in
-this book.</p>
+<h2>Test A: BlazeSilent (Abbr title expansion)</h2>
 
-<h2>Test 1: BlazeSilent (Abbr title expansion)</h2>
-
-<p>Look up <strong>BlazeSilent</strong>. The definition contains three
+<p>Look up <em>BlazeSilent</em>. The definition contains three
 <code>abbr</code> elements, each with a <code>title</code> attribute. The renderer
 appends the title in parentheses after the abbreviation text.</p>
 
@@ -20,22 +21,22 @@ appends the title in parentheses after the abbreviation text.</p>
 <li>Abbreviation three: <em>f.</em> (filius) -- the abbreviation text is italic</li>
 </ul>
 
-<h2>Test 2: ClearSvg (Block-strip tags)</h2>
+<h2>Test B: ClearSvg (Block-strip tags)</h2>
 
-<p>Look up <strong>ClearSvg</strong>. The definition contains nine block-level tags
+<p>Look up <em>ClearSvg</em>. The definition contains nine block-level tags
 whose entire subtrees must be stripped: <code>hiero</code>, <code>svg</code>,
 <code>math</code>, <code>gallery</code>, <code>nowiki</code>, <code>poem</code>,
 <code>ref</code> (lowercase), <code>REF</code> (uppercase), and a standalone
 <code>img</code>.</p>
 
 <p>Expected output: the description paragraph, then a <code>----------</code>
-separator, then <strong>nothing</strong>, then a second <code>----------</code>
+separator, then nothing, then a second <code>----------</code>
 separator. If any text appears between the two rules, a strip tag is leaking
 content.</p>
 
-<h2>Test 3: DarkMath (Block structure)</h2>
+<h2>Test C: DarkMath (Block structure)</h2>
 
-<p>Look up <strong>DarkMath</strong>. The definition exercises every block
+<p>Look up <em>DarkMath</em>. The definition exercises every block
 structure element.</p>
 
 <p>Expected output (in order, after the description):</p>
@@ -49,60 +50,63 @@ structure element.</p>
 <li>Four bold headings: Heading One, Heading Two, Heading Three, Heading Four (h1--h4)</li>
 </ul>
 
-<h2>Test 4: EmptyGallery (Inline formatting)</h2>
+<h2>Test D: EmptyGallery (Inline formatting)</h2>
 
-<p>Look up <strong>EmptyGallery</strong>. The definition exercises every inline
+<p>Look up <em>EmptyGallery</em>. The definition exercises every inline
 formatting tag. Expected rendering for each word or phrase:</p>
 
 <ul>
-<li><strong>bold</strong> (b element) -- rendered bold</li>
-<li><strong>bold</strong> (strong element) -- rendered bold</li>
-<li><em>italic</em> (i element) -- rendered italic</li>
-<li><em>italic</em> (em element) -- rendered italic</li>
-<li><u>underline</u> (u element) -- rendered underlined</li>
+<li>bold (b element) -- rendered bold</li>
+<li>bold (strong element) -- rendered bold</li>
+<li>italic (i element) -- rendered italic</li>
+<li>italic (em element) -- rendered italic</li>
+<li>underline (u element) -- rendered underlined</li>
 <li>strike (s element) -- rendered as plain text (strikethrough not supported by renderer)</li>
 <li>H2O (sub element) -- rendered as plain text "H2O" (subscript not supported)</li>
 <li>x2 (sup element) -- rendered as plain text "x2" (superscript not supported)</li>
-<li><strong>printf</strong> (code element) -- rendered bold</li>
-<li><strong>mono</strong> (tt element) -- rendered bold</li>
+<li>printf (code element) -- rendered bold</li>
+<li>mono (tt element) -- rendered bold</li>
 <li>small (small element) -- rendered as plain text (font-size change not supported)</li>
 <li>big (big element) -- rendered as plain text (font-size change not supported)</li>
-<li><em>count</em> (var element) -- rendered italic</li>
+<li>count (var element) -- rendered italic</li>
 </ul>
 
 <p>Nested combinations (on a second line):</p>
 <ul>
-<li><strong><em>bold-italic</em></strong> (b + i) -- rendered bold-italic</li>
-<li><strong><em><u>bold-italic-underline</u></em></strong> (b + i + u) -- rendered bold-italic-underlined</li>
+<li>bold-italic (b + i) -- rendered bold-italic</li>
+<li>bold-italic-underline (b + i + u) -- rendered bold-italic-underlined</li>
 </ul>
 
 <p>Spacing check: the words on the inline formatting line are separated by spaces
 in the source. Verify that a visible gap appears between every consecutive pair of
-words on screen — no two styled words should be touching or run together.</p>
+words on screen -- no two styled words should be touching or run together.</p>
 
-<h2>Test 5: FrostNowiki (Strip tag, keep text)</h2>
+<h2>Test E: FrostNowiki (Strip tag, keep text)</h2>
 
-<p>Look up <strong>FrostNowiki</strong>. The definition contains three cases where
-an unknown or registered tag is stripped but its text content is preserved.</p>
+<p>Look up <em>FrostNowiki</em>. The definition contains four cases where
+a tag is stripped but its text content is preserved.</p>
 
-<p>Expected output (three lines after the description):</p>
+<p>Expected output (four lines after the description):</p>
 <ul>
 <li>visible span text (span tag stripped, text kept)</li>
 <li>visible unknown text (unknown tag stripped, text kept)</li>
 <li>visible nested text (nested unknown tags both stripped, innermost text kept)</li>
+<li>visible anchor text (anchor tag stripped, text kept)</li>
 </ul>
 
-<h2>Test 6: GlowPoem (Wikitext annotations)</h2>
+<h2>Test F: GlowPoem (Wikitext annotations)</h2>
 
-<p>Look up <strong>GlowPoem</strong>. The definition contains eight self-closing
+<p>Look up <em>GlowPoem</em>. The definition contains eight self-closing
 wikitext annotation tags of the form <code>XX:YY</code>. The renderer emits the
-suffix (the part after the colon) as inline text; the tag itself does not appear.</p>
+suffix (the part after the colon) as inline text; the tag itself does not appear.
+A ninth case uses a tag with body text; the body is suppressed and only the
+suffix renders.</p>
 
-<p>Expected inline text in order: four, oikos, la, sharp, noun, Grek, ameba, female</p>
+<p>Expected inline text in order: four, oikos, la, sharp, noun, Grek, ameba, female, value</p>
 
-<h2>Test 7: HazeEntity (HTML named entity resolution)</h2>
+<h2>Test G: HazeEntity (HTML named entity resolution)</h2>
 
-<p>Look up <strong>HazeEntity</strong>. The definition contains five HTML named
+<p>Look up <em>HazeEntity</em>. The definition contains five HTML named
 entities. The renderer resolves them to their UTF-8 equivalents inline before
 passing the text to the XML parser.</p>
 
@@ -110,7 +114,7 @@ passing the text to the XML parser.</p>
 <ul>
 <li>Brackets: [enclosed] (lsqb / rsqb resolved to [ ])</li>
 <li>Non-breaking space: left right (nbsp resolved to space)</li>
-<li>En dash: 1939&#x2013;1945 (ndash resolved to UTF-8 en dash)</li>
+<li>En dash: 1939-1945 (ndash resolved to UTF-8 en dash)</li>
 <li>Zero-width: before (lrm silently dropped)</li>
 <li>Unknown: before (unknown entity silently dropped)</li>
 </ul>

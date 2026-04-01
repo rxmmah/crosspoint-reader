@@ -82,7 +82,7 @@ Lookup history is stored per-book and accessible from the reader menu.
 3. Select any entry and press the select button to re-look it up. Pressing the back button from the resulting definition returns to the history screen.
 4. Long-press the select button on any entry to enter delete mode. Press the select button to confirm deletion, or the back button to cancel.
 
-The history list is capped at the **History Limit** value in Settings. When the cap is reached, the oldest entry is removed to make room for the new one.
+The history list is capped at the **Dictionary History Limit** value in Settings. When the cap is reached, the oldest entry is removed to make room for the new one.
 
 ---
 
