@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="$ROOT_DIR/build/dict_html_renderer"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+BUILD_DIR="$ROOT_DIR/build/dict-html-renderer"
 BINARY="$BUILD_DIR/DictHtmlRendererTest"
 
 mkdir -p "$BUILD_DIR"
@@ -41,7 +41,7 @@ gcc "${CFLAGS[@]}" -c "$ROOT_DIR/lib/expat/xmltok.c"   -o "$BUILD_DIR/xmltok.o"
 
 # Compile and link C++ sources + expat objects
 g++ "${CXXFLAGS[@]}" \
-  "$ROOT_DIR/test/dict_html_renderer/DictHtmlRendererTest.cpp" \
+  "$ROOT_DIR/test/dict-html-renderer/DictHtmlRendererTest.cpp" \
   "$ROOT_DIR/lib/DictHtmlRenderer/DictHtmlRenderer.cpp" \
   "$ROOT_DIR/lib/Utf8/Utf8.cpp" \
   "$BUILD_DIR/xmlparse.o" \

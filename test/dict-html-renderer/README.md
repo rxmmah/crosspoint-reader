@@ -2,13 +2,13 @@
 
 Host-side smoke test for `lib/DictHtmlRenderer/`. Verifies that the renderer
 produces correct `StyledSpan` output for all 7 tag categories in the
-`expat-full` test dictionary, exercises boundary conditions, and runs IPA
+`html-definitions` test dictionary, exercises boundary conditions, and runs IPA
 utility unit tests.
 
 ## Build and run
 
 ```bash
-bash test/run_dict_html_renderer.sh
+bash test/dict-html-renderer/run.sh
 ```
 
 Requires `gcc` and `g++` (via `build-essential`). The script compiles the
