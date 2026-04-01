@@ -9,10 +9,12 @@
 #include <algorithm>
 
 #include "../util/ConfirmationActivity.h"
+#include "../util/KeyboardEntryActivity.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/StringUtils.h"
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
@@ -88,21 +90,166 @@ void FileBrowserActivity::loadFiles() {
       file.close();
       continue;
     }
-
     if (file.isDirectory()) {
       files.emplace_back(std::string(name) + "/");
     } else {
-      std::string_view filename{name};
-      if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
-          FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
-          FsHelpers::hasBmpExtension(filename)) {
-        files.emplace_back(filename);
-      }
+      files.emplace_back(std::string(name));
     }
     file.close();
   }
   root.close();
   sortFileList(files);
+}
+
+void FileBrowserActivity::loadPickerFolders() {
+  pickerFolders.clear();
+  pickerFiles.clear();
+
+  auto root = Storage.open(pickerPath.c_str());
+  if (!root || !root.isDirectory()) {
+    if (root) root.close();
+    return;
+  }
+
+  root.rewindDirectory();
+  char name[500];
+  for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
+    file.getName(name, sizeof(name));
+    if ((!SETTINGS.showHiddenFiles && name[0] == '.') || strcmp(name, "System Volume Information") == 0) {
+      file.close();
+      continue;
+    }
+    if (file.isDirectory()) {
+      pickerFolders.emplace_back(std::string(name) + "/");
+    } else {
+      pickerFiles.emplace_back(std::string(name));
+    }
+    file.close();
+  }
+  root.close();
+  sortFileList(pickerFolders);
+  sortFileList(pickerFiles);
+}
+
+void FileBrowserActivity::performMove(const std::string& destPath) {
+  const auto pos = fileToMove.rfind('/');
+  const std::string filename = (pos != std::string::npos) ? fileToMove.substr(pos + 1) : fileToMove;
+
+  std::string dest = destPath;
+  if (dest.back() != '/') dest += "/";
+  dest += filename;
+
+  // Short-circuit: source and destination are the same path
+  if (dest == fileToMove) {
+    LOG_DBG("FileBrowser", "Move skipped: source and destination are identical: %s", fileToMove.c_str());
+    fileToMove.clear();
+    mode = BrowserMode::NORMAL;
+    requestUpdate(true);
+    return;
+  }
+
+  bool ok = Storage.rename(fileToMove.c_str(), dest.c_str());
+
+  if (ok) {
+    clearFileMetadata(fileToMove);
+  }
+
+  if (!ok) {
+    // Only attempt copy+delete for true cross-directory moves
+    const auto srcSlash = fileToMove.rfind('/');
+    const auto dstSlash = dest.rfind('/');
+    const std::string srcParent = (srcSlash != std::string::npos) ? fileToMove.substr(0, srcSlash) : "";
+    const std::string dstParent = (dstSlash != std::string::npos) ? dest.substr(0, dstSlash) : "";
+
+    if (srcParent == dstParent) {
+      LOG_ERR("FileBrowser", "rename failed within same directory, skipping copy+delete: %s -> %s", fileToMove.c_str(),
+              dest.c_str());
+    } else {
+      // Refuse to overwrite an existing file at the destination
+      auto existing = Storage.open(dest.c_str());
+      if (existing) {
+        existing.close();
+        LOG_ERR("FileBrowser", "Move aborted: destination already exists: %s", dest.c_str());
+      } else {
+        // rename() fails across directories on FAT32 — fall back to copy + delete
+        LOG_DBG("FileBrowser", "rename failed, trying copy+delete: %s -> %s", fileToMove.c_str(), dest.c_str());
+
+        HalFile src, dst;
+        bool srcOpen = Storage.openFileForRead("FileBrowser", fileToMove, src);
+        bool dstOpen = srcOpen && Storage.openFileForWrite("FileBrowser", dest, dst);
+        ok = srcOpen && dstOpen;
+
+        if (ok) {
+          constexpr size_t BUF_SIZE = 512;
+          uint8_t buf[BUF_SIZE];
+          bool copyOk = true;
+          while (src.available()) {
+            const int n = src.read(buf, BUF_SIZE);
+            if (n <= 0) {
+              copyOk = false;
+              break;
+            }
+            if (dst.write(buf, static_cast<size_t>(n)) != static_cast<size_t>(n)) {
+              copyOk = false;
+              break;
+            }
+          }
+          src.close();
+          dst.close();
+
+          if (copyOk) {
+            if (Storage.remove(fileToMove.c_str())) {
+              LOG_DBG("FileBrowser", "Copy+delete succeeded: %s -> %s", fileToMove.c_str(), dest.c_str());
+              ok = true;
+            } else {
+              // Copy succeeded but original not removed — clean up the copy
+              if (srcOpen) src.close();
+              LOG_ERR("FileBrowser", "Copy ok but delete failed, removing copy: %s", dest.c_str());
+              Storage.remove(dest.c_str());
+              ok = false;
+            }
+          } else {
+            LOG_ERR("FileBrowser", "Copy failed, removing partial dest: %s", dest.c_str());
+            Storage.remove(dest.c_str());
+            ok = false;
+          }
+        } else {
+          LOG_ERR("FileBrowser", "Could not open files for copy: %s -> %s", fileToMove.c_str(), dest.c_str());
+        }
+      }  // else: destination does not exist
+    }  // else: cross-directory move
+  }  // if (!ok)
+
+  if (!ok) {
+    LOG_ERR("FileBrowser", "Move failed: %s -> %s", fileToMove.c_str(), dest.c_str());
+  }
+
+  fileToMove.clear();
+  mode = BrowserMode::NORMAL;
+  loadFiles();
+  if (selectorIndex >= files.size() && !files.empty()) {
+    selectorIndex = files.size() - 1;
+  }
+  requestUpdate(true);
+}
+
+void FileBrowserActivity::createFolder(const std::string& name) {
+  if (name.empty()) return;
+
+  const std::string sanitized = StringUtils::sanitizeFilename(name);
+  if (sanitized.empty()) return;
+
+  std::string path = basepath;
+  if (path.back() != '/') path += "/";
+  path += sanitized;
+
+  if (Storage.mkdir(path.c_str())) {
+    LOG_DBG("FileBrowser", "Created folder: %s", path.c_str());
+  } else {
+    LOG_ERR("FileBrowser", "Failed to create folder: %s", path.c_str());
+  }
+  loadFiles();
+  requestUpdate(true);
 }
 
 void FileBrowserActivity::onEnter() {
@@ -128,7 +275,65 @@ void FileBrowserActivity::clearFileMetadata(const std::string& fullPath) {
 }
 
 void FileBrowserActivity::loop() {
-  // Long press BACK (1s+) goes to root folder
+  // ── FOLDER PICKER MODE ────────────────────────────────────────────────────
+  if (mode == BrowserMode::PICKING_FOLDER) {
+    // Confirm: move the file into the currently displayed folder
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      performMove(pickerPath);
+      return;
+    }
+
+    // Right: navigate into the selected subfolder
+    if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+      if (!pickerFolders.empty()) {
+        if (pickerPath.back() != '/') pickerPath += "/";
+        const std::string& sel = pickerFolders[pickerIndex];
+        pickerPath += sel.substr(0, sel.length() - 1);
+        pickerIndex = 0;
+        loadPickerFolders();
+        requestUpdate();
+      }
+      return;
+    }
+
+    // Back: go up one level, or cancel if already at root
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      if (pickerPath != "/") {
+        const auto slash = pickerPath.find_last_of('/');
+        pickerPath = (slash == 0) ? "/" : pickerPath.substr(0, slash);
+        pickerIndex = 0;
+        loadPickerFolders();
+        requestUpdate();
+      } else {
+        fileToMove.clear();
+        mode = BrowserMode::NORMAL;
+        requestUpdate();
+      }
+      return;
+    }
+
+    // Up/Down: navigate selectable folders only (files are display-only)
+    if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
+      if (!pickerFolders.empty()) {
+        pickerIndex =
+            ButtonNavigator::previousIndex(static_cast<int>(pickerIndex), static_cast<int>(pickerFolders.size()));
+        requestUpdate();
+      }
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+      if (!pickerFolders.empty()) {
+        pickerIndex = ButtonNavigator::nextIndex(static_cast<int>(pickerIndex), static_cast<int>(pickerFolders.size()));
+        requestUpdate();
+      }
+      return;
+    }
+    return;
+  }
+
+  // ── NORMAL MODE ───────────────────────────────────────────────────────────
+
+  // Long-press Back (1 s+) jumps to root
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_HOME_MS &&
       basepath != "/") {
     basepath = "/";
@@ -140,34 +345,44 @@ void FileBrowserActivity::loop() {
   const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (consumeConfirm) {
+      consumeConfirm = false;
+      return;
+    }
     if (files.empty()) return;
 
     const std::string& entry = files[selectorIndex];
     bool isDirectory = (entry.back() == '/');
 
-    if (mappedInput.getHeldTime() >= GO_HOME_MS && !isDirectory) {
-      // --- LONG PRESS ACTION: DELETE FILE ---
+    if (mappedInput.getHeldTime() >= GO_HOME_MS) {
+      // Long-press Confirm: delete file or folder
       std::string cleanBasePath = basepath;
       if (cleanBasePath.back() != '/') cleanBasePath += "/";
-      const std::string fullPath = cleanBasePath + entry;
+      // Strip trailing '/' from dir entry for the actual path
+      const std::string entryName = isDirectory ? entry.substr(0, entry.length() - 1) : entry;
+      const std::string fullPath = cleanBasePath + entryName;
 
-      auto handler = [this, fullPath](const ActivityResult& res) {
+      auto handler = [this, fullPath, isDirectory](const ActivityResult& res) {
         if (!res.isCancelled) {
           LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
-          clearFileMetadata(fullPath);
-          if (Storage.remove(fullPath.c_str())) {
+          bool ok = false;
+          if (isDirectory) {
+            ok = Storage.removeDir(fullPath.c_str());
+          } else {
+            clearFileMetadata(fullPath);
+            ok = Storage.remove(fullPath.c_str());
+          }
+          if (ok) {
             LOG_DBG("FileBrowser", "Deleted successfully");
             loadFiles();
             if (files.empty()) {
               selectorIndex = 0;
             } else if (selectorIndex >= files.size()) {
-              // Move selection to the new "last" item
               selectorIndex = files.size() - 1;
             }
-
             requestUpdate(true);
           } else {
-            LOG_ERR("FileBrowser", "Failed to delete file: %s", fullPath.c_str());
+            LOG_ERR("FileBrowser", "Failed to delete: %s", fullPath.c_str());
           }
         } else {
           LOG_DBG("FileBrowser", "Delete cancelled by user");
@@ -176,10 +391,14 @@ void FileBrowserActivity::loop() {
 
       std::string heading = tr(STR_DELETE) + std::string("? ");
 
-      startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry), handler);
+      // FIX: Added consume flags here to prevent bleed-through after the deletion dialog closes
+      consumeConfirm = true;
+      consumeBack = true;
+      startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entryName),
+                             handler);
       return;
     } else {
-      // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---
+      // Short-press Confirm: open / navigate
       if (basepath.back() != '/') basepath += "/";
 
       if (isDirectory) {
@@ -195,19 +414,19 @@ void FileBrowserActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    // Short press: go up one directory, or go home if at root
+    if (consumeBack) {
+      consumeBack = false;
+      return;
+    }
     if (mappedInput.getHeldTime() < GO_HOME_MS) {
       if (basepath != "/") {
         const std::string oldPath = basepath;
-
         basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
         if (basepath.empty()) basepath = "/";
         loadFiles();
-
         const auto pos = oldPath.find_last_of('/');
         const std::string dirName = oldPath.substr(pos + 1) + "/";
         selectorIndex = findEntry(dirName);
-
         requestUpdate();
       } else {
         onGoHome();
@@ -215,26 +434,63 @@ void FileBrowserActivity::loop() {
     }
   }
 
+  // Left (bottom button): initiate Move for the selected file
+  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+    if (!files.empty()) {
+      const std::string& entry = files[selectorIndex];
+      if (entry.back() != '/') {
+        std::string cleanBase = basepath;
+        if (cleanBase.back() != '/') cleanBase += "/";
+        fileToMove = cleanBase + entry;
+        pickerPath = "/";
+        pickerIndex = 0;
+        loadPickerFolders();
+        mode = BrowserMode::PICKING_FOLDER;
+        requestUpdate();
+      }
+    }
+    return;
+  }
+
+  // Right (bottom button): create a new folder in the current directory
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+    consumeBack = true;
+    consumeConfirm = true;
+    auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "New Folder");
+    startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
+      // FIX: Removed the lines resetting consumeBack and consumeConfirm to false
+      if (!result.isCancelled) {
+        createFolder(std::get<KeyboardResult>(result.data).text);
+      }
+    });
+    return;
+  }
+
+  // Up/Down (side buttons): single-item navigation; page-scroll when held
   int listSize = static_cast<int>(files.size());
-  buttonNavigator.onNextRelease([this, listSize] {
-    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousRelease([this, listSize] {
-    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
-    requestUpdate();
-  });
-
   buttonNavigator.onNextContinuous([this, listSize, pageItems] {
     selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     requestUpdate();
   });
-
   buttonNavigator.onPreviousContinuous([this, listSize, pageItems] {
     selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     requestUpdate();
   });
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
+    if (!files.empty()) {
+      selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
+      requestUpdate();
+    }
+    return;
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+    if (!files.empty()) {
+      selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
+      requestUpdate();
+    }
+    return;
+  }
 }
 
 std::string getFileName(std::string filename) {
@@ -256,6 +512,55 @@ void FileBrowserActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
+  // ── FOLDER PICKER MODE ────────────────────────────────────────────────────
+  if (mode == BrowserMode::PICKING_FOLDER) {
+    // Header: show what we're moving
+    const auto pos = fileToMove.rfind('/');
+    const std::string filename = (pos != std::string::npos) ? fileToMove.substr(pos + 1) : fileToMove;
+    // TODO: replace with tr(STR_MOVE) once added to I18n
+    const std::string heading = std::string("Move: ") + filename;
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, heading.c_str());
+
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+
+    // Current picker path as sub-label
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop, pickerPath.c_str());
+
+    const int listTop = contentTop + 20;
+    const int listHeight = contentHeight - 20;
+
+    // Combined list: folders first (selectable), then files (grayed out, context only)
+    const size_t totalItems = pickerFolders.size() + pickerFiles.size();
+    if (totalItems == 0) {
+      renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, listTop + 20, tr(STR_NO_FILES_FOUND));
+    } else {
+      GUI.drawList(
+          renderer, Rect{0, listTop, pageWidth, listHeight}, totalItems, pickerIndex,
+          [this](int index) -> std::string {
+            if (static_cast<size_t>(index) < pickerFolders.size()) {
+              const auto& f = pickerFolders[index];
+              return "> " + f.substr(0, f.length() - 1);
+            }
+            return getFileName(pickerFiles[index - pickerFolders.size()]);
+          },
+          nullptr,
+          [this](int index) {
+            if (static_cast<size_t>(index) < pickerFolders.size()) {
+              return UITheme::getFileIcon("/");
+            }
+            return UITheme::getFileIcon(pickerFiles[index - pickerFolders.size()]);
+          });
+    }
+
+    // TODO: replace "Move Here" / "Enter" with tr() once I18n keys are added
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "Move Here", "", pickerFolders.empty() ? "" : "Enter");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer();
+    return;
+  }
+
+  // ── NORMAL MODE ───────────────────────────────────────────────────────────
   std::string folderName = (basepath == "/") ? tr(STR_SD_CARD) : basepath.substr(basepath.rfind('/') + 1);
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
 
@@ -270,10 +575,11 @@ void FileBrowserActivity::render(RenderLock&&) {
         [this](int index) { return UITheme::getFileIcon(files[index]); });
   }
 
-  // Help text
+  // Show Move hint only for files (not directories), never when list is empty
+  const bool selectedIsFile = !files.empty() && files[selectorIndex].back() != '/';
   const auto labels =
       mappedInput.mapLabels(basepath == "/" ? tr(STR_HOME) : tr(STR_BACK), files.empty() ? "" : tr(STR_OPEN),
-                            files.empty() ? "" : tr(STR_DIR_UP), files.empty() ? "" : tr(STR_DIR_DOWN));
+                            selectedIsFile ? "Move" : "", "New Folder");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
