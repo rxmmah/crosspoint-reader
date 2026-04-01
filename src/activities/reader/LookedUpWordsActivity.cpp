@@ -86,7 +86,21 @@ void LookedUpWordsActivity::loop() {
     return;
   }
 
+  // Long press Confirm: enter delete-confirm mode (fire at threshold).
+  if (!deleteConfirmMode && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+      mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+    deleteConfirmMode = true;
+    confirmReleaseConsumed = true;
+    requestUpdate();
+    return;
+  }
+
   if (deleteConfirmMode) {
+    // Consume the Confirm release that follows the threshold-fire.
+    if (confirmReleaseConsumed && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      confirmReleaseConsumed = false;
+      return;
+    }
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       LookupHistory::removeAt(cachePath, fileIndexOf(selectedIndex));
       entries = LookupHistory::load(cachePath);
@@ -126,11 +140,6 @@ void LookedUpWordsActivity::loop() {
   });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
-      deleteConfirmMode = true;
-      requestUpdate();
-      return;
-    }
     controller.startLookup(entries[selectedIndex].word);
     return;
   }

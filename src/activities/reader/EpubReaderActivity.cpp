@@ -146,14 +146,23 @@ void EpubReaderActivity::loop() {
     openReaderMenu();
   }
 
+  // Suppress Back bleed-through after dictionary chain exit (long-press fires at threshold
+  // while Back is still held; ignore until fully released).
+  if (ignoreBackUntilRelease) {
+    if (!mappedInput.isPressed(MappedInputManager::Button::Back)) {
+      ignoreBackUntilRelease = false;
+    }
+  }
+
   // Long press BACK (1s+) goes to file selection
-  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
+  if (!ignoreBackUntilRelease && mappedInput.isPressed(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
     activityManager.goToFileBrowser(epub ? epub->getPath() : "");
     return;
   }
 
   // Short press BACK goes directly to home (or restores position if viewing footnote)
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+  if (!ignoreBackUntilRelease && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
     if (footnoteDepth > 0) {
       restoreSavedPosition();
@@ -464,12 +473,18 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
                                  renderer, mappedInput, std::move(pageForLookup), orientedMarginLeft, orientedMarginTop,
                                  bookCachePath, nextPageFirstWord),
-                             [this](const ActivityResult&) { requestUpdate(); });
+                             [this](const ActivityResult&) {
+                               ignoreBackUntilRelease = true;
+                               requestUpdate();
+                             });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::LOOKUP_HISTORY: {
       startActivityForResult(std::make_unique<LookedUpWordsActivity>(renderer, mappedInput, epub->getCachePath()),
-                             [this](const ActivityResult&) { requestUpdate(); });
+                             [this](const ActivityResult&) {
+                               ignoreBackUntilRelease = true;
+                               requestUpdate();
+                             });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SET_BOOK_DICTIONARY: {

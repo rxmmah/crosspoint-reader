@@ -476,15 +476,18 @@ void DictionaryDefinitionActivity::loop() {
         return;
       }
 
-      if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-        if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
-          setResult(ActivityResult{});
-          finish();
-        } else {
-          isWordSelectMode = false;
-          navigator.reset();
-          requestUpdate();
-        }
+      // Long press Back: exit-all (fire at threshold).
+      if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+        setResult(ActivityResult{});
+        finish();
+        return;
+      }
+
+      // Short press Back: exit word-select mode.
+      if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < LONG_PRESS_MS) {
+        isWordSelectMode = false;
+        navigator.reset();
+        requestUpdate();
       }
     }
     return;
@@ -522,12 +525,16 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (showLookupButton && mappedInput.getHeldTime() >= LONG_PRESS_MS) {
-      setResult(ActivityResult{});  // Done: isCancelled=false — exit all the way
-      finish();
-      return;
-    }
+  // Long press Back: exit-all (fire at threshold, only when lookup button shown).
+  if (showLookupButton && mappedInput.isPressed(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+    setResult(ActivityResult{});  // Done: isCancelled=false — exit all the way
+    finish();
+    return;
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+      (!showLookupButton || mappedInput.getHeldTime() < LONG_PRESS_MS)) {
     if (!cachePath.empty() && !chainWords.empty()) {
       std::string prevWord = chainWords.back();
       chainWords.pop_back();

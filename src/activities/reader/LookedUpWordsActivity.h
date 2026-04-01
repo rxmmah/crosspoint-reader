@@ -24,6 +24,7 @@ class LookedUpWordsActivity final : public Activity {
   std::vector<LookupHistory::Entry> entries;
   int selectedIndex = 0;
   bool deleteConfirmMode = false;
+  bool confirmReleaseConsumed = false;
 
   DictionaryLookupController controller;
   ButtonNavigator buttonNavigator;

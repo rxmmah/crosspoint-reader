@@ -31,6 +31,7 @@ void WordSelectNavigator::reset() {
   currentRow = 0;
   currentWordInRow = 0;
   inMultiSelectMode = false;
+  confirmReleaseConsumed = false;
   anchorFlatIndex = -1;
 }
 
@@ -173,6 +174,13 @@ WordSelectNavigator::MultiSelectAction WordSelectNavigator::handleMultiSelectInp
                                                                                    std::string& outPhrase,
                                                                                    unsigned long longPressMs) {
   if (inMultiSelectMode) {
+    // Consume the Confirm release that follows the threshold-fire entry into multi-select.
+    if (confirmReleaseConsumed) {
+      if (input.wasReleased(MappedInputManager::Button::Confirm)) {
+        confirmReleaseConsumed = false;
+      }
+      return MultiSelectAction::None;
+    }
     if (input.wasReleased(MappedInputManager::Button::Confirm)) {
       const int cursorIdx = getCurrentFlatIndex();
       outPhrase = buildPhrase(anchorFlatIndex, cursorIdx);
@@ -186,16 +194,16 @@ WordSelectNavigator::MultiSelectAction WordSelectNavigator::handleMultiSelectInp
     return MultiSelectAction::None;
   }
 
-  if (input.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (input.getHeldTime() >= longPressMs) {
-      const int flatIdx = getCurrentFlatIndex();
-      if (flatIdx >= 0) {
-        inMultiSelectMode = true;
-        anchorFlatIndex = flatIdx;
-        return MultiSelectAction::EnteredMultiSelect;
-      }
-      return MultiSelectAction::Consumed;
+  // Long press Confirm: enter multi-select (fire at threshold, not on release).
+  if (input.isPressed(MappedInputManager::Button::Confirm) && input.getHeldTime() >= longPressMs) {
+    const int flatIdx = getCurrentFlatIndex();
+    if (flatIdx >= 0) {
+      inMultiSelectMode = true;
+      anchorFlatIndex = flatIdx;
+      confirmReleaseConsumed = true;
+      return MultiSelectAction::EnteredMultiSelect;
     }
+    return MultiSelectAction::Consumed;
   }
 
   return MultiSelectAction::None;

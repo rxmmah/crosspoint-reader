@@ -104,6 +104,7 @@ class WordSelectNavigator {
   int currentRow = 0;
   int currentWordInRow = 0;
   bool inMultiSelectMode = false;
+  bool confirmReleaseConsumed = false;
   int anchorFlatIndex = -1;
 
   int findClosestWord(int targetRow) const;
