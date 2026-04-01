@@ -71,9 +71,6 @@ class WordSelectNavigator {
   // Word at flat index idx. nullptr if out of bounds.
   const WordInfo* getWordAt(int idx) const;
 
-  // Total word count.
-  int getWordCount() const { return static_cast<int>(words.size()); }
-
   // Join display text of words in range [fromIdx, toIdx] (inclusive, either order).
   // Returns raw joined string; caller should apply Dictionary::cleanWord() if needed.
   std::string buildPhrase(int fromIdx, int toIdx) const;
@@ -83,10 +80,6 @@ class WordSelectNavigator {
   enum class MultiSelectAction { None, Consumed, PhraseReady, ExitedMultiSelect, EnteredMultiSelect };
 
   bool isMultiSelecting() const { return inMultiSelectMode; }
-  void exitMultiSelect() {
-    inMultiSelectMode = false;
-    anchorFlatIndex = -1;
-  }
 
   // Process Confirm/Back for multi-select state machine.
   // Returns PhraseReady when a phrase range is confirmed (raw phrase in outPhrase).

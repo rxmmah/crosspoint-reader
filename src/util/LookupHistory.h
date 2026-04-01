@@ -27,9 +27,6 @@ class LookupHistory {
   // Remove entry at 0-based file index. Rewrites file without that entry.
   static bool removeAt(const std::string& cachePath, int index);
 
-  // True if the history file exists and contains at least one entry.
-  static bool hasHistory(const std::string& cachePath);
-
  private:
   static std::string filePath(const std::string& cachePath);
   static std::vector<Entry> readAll(const std::string& path);

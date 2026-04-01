@@ -180,10 +180,3 @@ bool LookupHistory::removeAt(const std::string& cachePath, int index) {
   entries.erase(entries.begin() + index);
   return writeAll(path, entries);
 }
-
-bool LookupHistory::hasHistory(const std::string& cachePath) {
-  const std::string path = filePath(cachePath);
-  if (!Storage.exists(path.c_str())) return false;
-  const auto entries = readAll(path);
-  return !entries.empty();
-}
