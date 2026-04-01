@@ -411,10 +411,10 @@ static const std::vector<ExpectedSpan> kHtmlEntities = {
 // ---------------------------------------------------------------------------
 
 int main(int argc, char** argv) {
-  const char* dictDir = (argc > 1) ? argv[1] : "test/dictionaries/expat-full";
+  const char* dictDir = (argc > 1) ? argv[1] : "test/dictionaries/html-definitions";
 
-  std::string idxPath = std::string(dictDir) + "/expat-full.idx";
-  std::string dictPath = std::string(dictDir) + "/expat-full.dict";
+  std::string idxPath = std::string(dictDir) + "/html-definitions.idx";
+  std::string dictPath = std::string(dictDir) + "/html-definitions.dict";
 
   std::string idxData = readFile(idxPath);
   std::string dictData = readFile(dictPath);

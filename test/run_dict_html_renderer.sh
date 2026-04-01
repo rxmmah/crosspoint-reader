@@ -49,4 +49,4 @@ g++ "${CXXFLAGS[@]}" \
   "$BUILD_DIR/xmltok.o" \
   -o "$BINARY"
 
-"$BINARY" "$ROOT_DIR/test/dictionaries/expat-full" "$@"
+"$BINARY" "$ROOT_DIR/test/dictionaries/html-definitions" "$@"

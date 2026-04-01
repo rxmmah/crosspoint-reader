@@ -6,6 +6,6 @@
     "entry_format": "m",
     "ifo_version": "2.4.2",
     "generate_ifo": false,
-    "base_entries": "basic"
+    "base_entries": "english-no-syn"
   }
 }

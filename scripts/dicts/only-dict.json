@@ -7,6 +7,6 @@
     "ifo_version": "2.4.2",
     "generate_ifo": false,
     "generate_idx": false,
-    "base_entries": "basic"
+    "base_entries": "english-no-syn"
   }
 }
