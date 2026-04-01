@@ -236,38 +236,25 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords(std::vector<WordSelectNa
       rows.end());
 }
 
-// Shared helper: run findSimilar for `word` and launch suggestions activity, or show "not found" popup.
+// Run findSimilar for `word` and launch suggestions activity, or set not-found.
+// On suggestion picked, delegates to controller (result flows back through loop() FoundDefinition).
 void DictionaryWordSelectActivity::handleNotFound(const std::string& word) {
   auto similar = Dictionary::findSimilar(word, 6, cachePath.c_str());
   if (!similar.empty()) {
-    startActivityForResult(
-        std::make_unique<DictionarySuggestionsActivity>(renderer, mappedInput, std::move(similar)),
-        [this](const ActivityResult& result) {
-          if (result.isCancelled) {
-            controller.setNotFound();
-            return;
-          }
-          const auto& wr = std::get<WordResult>(result.data);
-          std::string def = Dictionary::lookup(wr.word, {}, cachePath.c_str());
-          if (!def.empty()) {
-            int chainStart = LookupHistory::addWord(cachePath, wr.word, LookupHistory::Status::Suggestion);
-            startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, wr.word, def,
-                                                                                  true, cachePath, chainStart),
-                                   [this](const ActivityResult& r) {
-                                     if (!r.isCancelled) {
-                                       setResult(ActivityResult{});
-                                       finish();
-                                     } else {
-                                       requestUpdate();
-                                     }
-                                   });
-          } else {
-            controller.setNotFound();
-          }
-        });
+    startActivityForResult(std::make_unique<DictionarySuggestionsActivity>(renderer, mappedInput, std::move(similar)),
+                           [this](const ActivityResult& result) {
+                             if (result.isCancelled) {
+                               controller.setNotFound();
+                               return;
+                             }
+                             const auto& wr = std::get<WordResult>(result.data);
+                             controller.startLookupAsSuggestion(wr.word);
+                           });
     return;
   }
-  LookupHistory::addWord(cachePath, word, LookupHistory::Status::NotFound);
+  if (!cachePath.empty()) {
+    LookupHistory::addWord(cachePath, word, LookupHistory::Status::NotFound);
+  }
   controller.setNotFound();
 }
 
