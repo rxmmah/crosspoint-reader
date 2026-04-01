@@ -490,13 +490,16 @@ int main(int argc, char** argv) {
   }
 
   // ---------------------------------------------------------------------------
-  // B1: parseError — malformed XML
+  // B1: parseError — malformed XML produces partial output
+  // The renderer wraps input in <_root>...</_root>. Unclosed tags cause a parse
+  // error, but partial spans accumulated before the error are still returned.
   // ---------------------------------------------------------------------------
   {
     printf("\n=== parseError (malformed XML) ===\n");
     const auto& badSpans = renderer.render("<p>unclosed", 11);
-    const bool pass = badSpans.empty();
-    printf("  spans: %zu (expected 0)\n", badSpans.size());
+    const bool pass = badSpans.size() == 1 && badSpans[0].text && strcmp(badSpans[0].text, "unclosed") == 0;
+    printf("  spans: %zu (expected 1: partial output)\n", badSpans.size());
+    if (!badSpans.empty()) printf("  span[0]: \"%s\"\n", badSpans[0].text ? badSpans[0].text : "(null)");
     printf("  %s\n", pass ? "PASS" : "FAIL");
     if (pass)
       passed++;
@@ -505,10 +508,11 @@ int main(int argc, char** argv) {
   }
 
   // ---------------------------------------------------------------------------
-  // B2: TEXT_BUF_SIZE truncation — 100 paragraphs of 90 chars each (9000 bytes)
+  // B2: Large input — 100 paragraphs of 90 chars each (9000 bytes)
+  // Dynamic buffers handle all 100 paragraphs; every span must have valid text.
   // ---------------------------------------------------------------------------
   {
-    printf("\n=== TEXT_BUF_SIZE truncation ===\n");
+    printf("\n=== large input (100 paragraphs) ===\n");
     std::string bigHtml;
     bigHtml.reserve(100 * 96);
     for (int i = 0; i < 100; i++) {
@@ -517,13 +521,13 @@ int main(int argc, char** argv) {
       bigHtml += "</p>";
     }
     const auto& bigSpans = renderer.render(bigHtml.c_str(), static_cast<int>(bigHtml.size()));
-    bool pass = bigSpans.size() < 100;
+    bool pass = bigSpans.size() == 100;
     for (const auto& s : bigSpans)
       if (!s.text) {
         pass = false;
         break;
       }
-    printf("  spans: %zu (expected < 100)\n", bigSpans.size());
+    printf("  spans: %zu (expected 100)\n", bigSpans.size());
     printf("  %s\n", pass ? "PASS" : "FAIL");
     if (pass)
       passed++;
@@ -532,20 +536,18 @@ int main(int argc, char** argv) {
   }
 
   // ---------------------------------------------------------------------------
-  // B3: PENDING_SIZE overflow — single <p> with 600 'B' chars
-  // emitText flushes at PENDING_SIZE-1 (511) and continues: 2 spans (511 + 89)
+  // B3: Long single paragraph — 600 chars in one <p>
+  // Dynamic pendingText has no fixed limit; entire text emitted as one span.
   // ---------------------------------------------------------------------------
   {
-    printf("\n=== PENDING_SIZE overflow ===\n");
+    printf("\n=== long single paragraph (600 chars) ===\n");
     std::string html = "<p>";
     html.append(600, 'B');
     html += "</p>";
     const auto& spans = renderer.render(html.c_str(), static_cast<int>(html.size()));
-    const bool pass = spans.size() == 2 && spans[0].text && strlen(spans[0].text) == 511 && spans[1].text &&
-                      strlen(spans[1].text) == 89;
-    printf("  spans: %zu (expected 2: 511 + 89 chars)\n", spans.size());
-    if (spans.size() >= 1) printf("  span[0] len: %zu\n", strlen(spans[0].text));
-    if (spans.size() >= 2) printf("  span[1] len: %zu\n", strlen(spans[1].text));
+    const bool pass = spans.size() == 1 && spans[0].text && strlen(spans[0].text) == 600;
+    printf("  spans: %zu (expected 1)\n", spans.size());
+    if (spans.size() >= 1) printf("  span[0] len: %zu (expected 600)\n", strlen(spans[0].text));
     printf("  %s\n", pass ? "PASS" : "FAIL");
     if (pass)
       passed++;
@@ -554,10 +556,10 @@ int main(int argc, char** argv) {
   }
 
   // ---------------------------------------------------------------------------
-  // B4: MAX_STACK overflow — 35 nested <i> tags (MAX_STACK=32; _root + 31 fit)
+  // B4: Deep nesting — 35 nested <i> tags (dynamic tag stack, no fixed limit)
   // ---------------------------------------------------------------------------
   {
-    printf("\n=== MAX_STACK overflow ===\n");
+    printf("\n=== deep nesting (35 nested <i> tags) ===\n");
     std::string html;
     for (int i = 0; i < 35; i++) html += "<i>";
     html += "deep text";
@@ -638,7 +640,8 @@ int main(int argc, char** argv) {
 
     // Empty string → 0 runs
     {
-      auto runs = splitIpaRuns("");
+      std::vector<IpaTextSpan> runs;
+      splitIpaRuns("", runs);
       const bool ok = runs.empty();
       printf("  empty string → %zu runs (expected 0)%s\n", runs.size(), ok ? "" : " FAIL");
       if (!ok) allPass = false;
@@ -646,7 +649,8 @@ int main(int argc, char** argv) {
 
     // Pure ASCII → 1 non-IPA run
     {
-      auto runs = splitIpaRuns("abc");
+      std::vector<IpaTextSpan> runs;
+      splitIpaRuns("abc", runs);
       const bool ok = runs.size() == 1 && !runs[0].isIpa && runs[0].text == "abc";
       printf("  \"abc\" → %zu run(s), isIpa=%d (expected 1, false)%s\n", runs.size(),
              runs.empty() ? -1 : (int)runs[0].isIpa, ok ? "" : " FAIL");
@@ -658,7 +662,8 @@ int main(int argc, char** argv) {
       std::string ipa;
       ipa += '\xC9';
       ipa += '\x90';
-      auto runs = splitIpaRuns(ipa);
+      std::vector<IpaTextSpan> runs;
+      splitIpaRuns(ipa.c_str(), runs);
       const bool ok = runs.size() == 1 && runs[0].isIpa && runs[0].text == ipa;
       printf("  U+0250 → %zu run(s), isIpa=%d (expected 1, true)%s\n", runs.size(),
              runs.empty() ? -1 : (int)runs[0].isIpa, ok ? "" : " FAIL");
@@ -671,7 +676,8 @@ int main(int argc, char** argv) {
       mixed += '\xC9';
       mixed += '\x90';
       mixed += "xyz";
-      auto runs = splitIpaRuns(mixed);
+      std::vector<IpaTextSpan> runs;
+      splitIpaRuns(mixed.c_str(), runs);
       const bool ok = runs.size() == 3 && !runs[0].isIpa && runs[0].text == "abc" && runs[1].isIpa && !runs[2].isIpa &&
                       runs[2].text == "xyz";
       printf("  \"abc\"+U+0250+\"xyz\" → %zu run(s) (expected 3)%s\n", runs.size(), ok ? "" : " FAIL");
@@ -686,7 +692,8 @@ int main(int argc, char** argv) {
       s += '\xC9';
       s += '\x91';  // U+0251
       s += "cd";
-      auto runs = splitIpaRuns(s);
+      std::vector<IpaTextSpan> runs;
+      splitIpaRuns(s.c_str(), runs);
       const bool ok = runs.size() == 3 && !runs[0].isIpa && runs[0].text == "ab" && runs[1].isIpa &&
                       runs[1].text.size() == 4 && !runs[2].isIpa && runs[2].text == "cd";
       printf("  \"ab\"+U+0250+U+0251+\"cd\" → %zu run(s) (expected 3, IPA run len 4)%s\n", runs.size(),
