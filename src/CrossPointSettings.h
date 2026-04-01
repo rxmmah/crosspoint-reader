@@ -224,6 +224,7 @@ class CrossPointSettings {
   static constexpr uint8_t HIST_CAP_STEP = 25;
   static constexpr uint8_t HIST_CAP_DEFAULT = 100;
   uint8_t lookupHistoryCap = HIST_CAP_DEFAULT;
+  uint8_t holdToLookup = 0;
 
   ~CrossPointSettings() = default;
 

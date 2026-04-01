@@ -29,8 +29,6 @@ class LookedUpWordsActivity final : public Activity {
   DictionaryLookupController controller;
   ButtonNavigator buttonNavigator;
 
-  static constexpr unsigned long LONG_PRESS_MS = 600;
-
   bool skipLoopDelay() override { return controller.skipLoopDelay(); }
 
   // Convert UI index (0 = most recent) to 0-based file index (0 = oldest).

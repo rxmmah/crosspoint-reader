@@ -141,6 +141,14 @@ void EpubReaderActivity::loop() {
     }
   }
 
+  // Hold Confirm → direct word-select (fire at threshold, 600ms).
+  if (SETTINGS.holdToLookup && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+      mappedInput.getHeldTime() >= Dictionary::LONG_PRESS_MS && section &&
+      Dictionary::exists(epub->getCachePath().c_str())) {
+    openWordSelect();
+    return;
+  }
+
   // Enter reader menu activity.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     openReaderMenu();
@@ -320,6 +328,44 @@ void EpubReaderActivity::openReaderMenu() {
       });
 }
 
+void EpubReaderActivity::openWordSelect() {
+  auto pageForLookup = section ? section->loadPageFromSectionFile() : nullptr;
+  if (!pageForLookup) {
+    requestUpdate();
+    return;
+  }
+  int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
+  renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
+                                   &orientedMarginLeft);
+  orientedMarginTop += SETTINGS.screenMargin;
+  orientedMarginLeft += SETTINGS.screenMargin;
+  std::string nextPageFirstWord;
+  if (section && section->currentPage < section->pageCount - 1) {
+    int savedPage = section->currentPage;
+    section->currentPage = savedPage + 1;
+    auto nextPage = section->loadPageFromSectionFile();
+    section->currentPage = savedPage;
+    if (nextPage && !nextPage->elements.empty()) {
+      const auto it = std::find_if(nextPage->elements.begin(), nextPage->elements.end(),
+                                   [](const auto& el) { return el->getTag() == TAG_PageLine; });
+      if (it != nextPage->elements.end()) {
+        const auto* firstLine = static_cast<const PageLine*>(it->get());
+        if (firstLine->getBlock() && !firstLine->getBlock()->getWords().empty()) {
+          nextPageFirstWord = firstLine->getBlock()->getWords().front();
+        }
+      }
+    }
+  }
+  const std::string bookCachePath = epub->getCachePath();
+  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
+                             renderer, mappedInput, std::move(pageForLookup), orientedMarginLeft, orientedMarginTop,
+                             bookCachePath, nextPageFirstWord),
+                         [this](const ActivityResult&) {
+                           ignoreBackUntilRelease = true;
+                           requestUpdate();
+                         });
+}
+
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
   switch (action) {
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
@@ -442,41 +488,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::LOOKUP: {
-      auto pageForLookup = section ? section->loadPageFromSectionFile() : nullptr;
-      if (!pageForLookup) {
-        requestUpdate();
-        break;
-      }
-      int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
-      renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
-                                       &orientedMarginLeft);
-      orientedMarginTop += SETTINGS.screenMargin;
-      orientedMarginLeft += SETTINGS.screenMargin;
-      std::string nextPageFirstWord;
-      if (section && section->currentPage < section->pageCount - 1) {
-        int savedPage = section->currentPage;
-        section->currentPage = savedPage + 1;
-        auto nextPage = section->loadPageFromSectionFile();
-        section->currentPage = savedPage;
-        if (nextPage && !nextPage->elements.empty()) {
-          const auto it = std::find_if(nextPage->elements.begin(), nextPage->elements.end(),
-                                       [](const auto& el) { return el->getTag() == TAG_PageLine; });
-          if (it != nextPage->elements.end()) {
-            const auto* firstLine = static_cast<const PageLine*>(it->get());
-            if (firstLine->getBlock() && !firstLine->getBlock()->getWords().empty()) {
-              nextPageFirstWord = firstLine->getBlock()->getWords().front();
-            }
-          }
-        }
-      }
-      const std::string bookCachePath = epub->getCachePath();
-      startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
-                                 renderer, mappedInput, std::move(pageForLookup), orientedMarginLeft, orientedMarginTop,
-                                 bookCachePath, nextPageFirstWord),
-                             [this](const ActivityResult&) {
-                               ignoreBackUntilRelease = true;
-                               requestUpdate();
-                             });
+      openWordSelect();
       break;
     }
     case EpubReaderMenuActivity::MenuAction::LOOKUP_HISTORY: {

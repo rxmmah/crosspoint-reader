@@ -20,7 +20,6 @@
 #include "util/LookupHistory.h"
 
 static constexpr char kBullet[] = "- ";
-static constexpr unsigned long LONG_PRESS_MS = 600;
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
@@ -440,14 +439,14 @@ void DictionaryDefinitionActivity::loop() {
       }
 
       // Long press Back: exit-all (fire at threshold).
-      if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+      if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= Dictionary::LONG_PRESS_MS) {
         setResult(ActivityResult{});
         finish();
         return;
       }
 
       // Short press Back: exit word-select mode.
-      if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < LONG_PRESS_MS) {
+      if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < Dictionary::LONG_PRESS_MS) {
         isWordSelectMode = false;
         navigator.reset();
         requestUpdate();
@@ -490,14 +489,14 @@ void DictionaryDefinitionActivity::loop() {
 
   // Long press Back: exit-all (fire at threshold, only when lookup button shown).
   if (showLookupButton && mappedInput.isPressed(MappedInputManager::Button::Back) &&
-      mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+      mappedInput.getHeldTime() >= Dictionary::LONG_PRESS_MS) {
     setResult(ActivityResult{});  // Done: isCancelled=false — exit all the way
     finish();
     return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
-      (!showLookupButton || mappedInput.getHeldTime() < LONG_PRESS_MS)) {
+      (!showLookupButton || mappedInput.getHeldTime() < Dictionary::LONG_PRESS_MS)) {
     if (!cachePath.empty() && !chainWords.empty()) {
       std::string prevWord = chainWords.back();
       chainWords.pop_back();

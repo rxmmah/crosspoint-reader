@@ -47,6 +47,12 @@ The **Look Up Word** option in the reader menu is only visible when a dictionary
 4. Press **Confirm** to look up the highlighted word.
 5. Press **Back** to exit word-select without looking anything up.
 
+### Quick Lookup (Hold to Look Up)
+
+If **Dictionary Hold to Look Up** is enabled in Settings, holding **Confirm** in the reader enters word-select directly, skipping the reader menu. The overlay appears after a brief hold. Release and navigate to a word as usual.
+
+This setting is off by default.
+
 ### How Lookup Works
 
 When you select a word, the reader searches for it in this order:

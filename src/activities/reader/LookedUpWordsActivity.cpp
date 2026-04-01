@@ -7,6 +7,7 @@
 
 #include "DictionaryDefinitionActivity.h"
 #include "MappedInputManager.h"
+#include "util/Dictionary.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/LookupHistory.h"
@@ -88,7 +89,7 @@ void LookedUpWordsActivity::loop() {
 
   // Long press Confirm: enter delete-confirm mode (fire at threshold).
   if (!deleteConfirmMode && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
-      mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+      mappedInput.getHeldTime() >= Dictionary::LONG_PRESS_MS) {
     deleteConfirmMode = true;
     confirmReleaseConsumed = true;
     requestUpdate();
