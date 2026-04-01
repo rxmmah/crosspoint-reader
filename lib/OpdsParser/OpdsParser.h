@@ -49,6 +49,7 @@ class OpdsParser final : public Print {
   ~OpdsParser();
 
   // Disable copy
+  const std::string& getSearchTemplate() const { return searchTemplate; }
   OpdsParser(const OpdsParser&) = delete;
   OpdsParser& operator=(const OpdsParser&) = delete;
 
@@ -85,6 +86,7 @@ class OpdsParser final : public Print {
   static void XMLCALL endElement(void* userData, const XML_Char* name);
   static void XMLCALL characterData(void* userData, const XML_Char* s, int len);
 
+  std::string searchTemplate;
   // Helper to find attribute value
   static const char* findAttribute(const XML_Char** atts, const char* name);
 
