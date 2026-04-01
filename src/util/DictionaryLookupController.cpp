@@ -173,6 +173,39 @@ bool DictionaryLookupController::render() {
   return false;
 }
 
+bool DictionaryLookupController::handleMultiSelect(WordSelectNavigator& navigator) {
+  std::string msPhrase;
+  const auto msAction = navigator.handleMultiSelectInput(mappedInput, msPhrase);
+  if (msAction == WordSelectNavigator::MultiSelectAction::None) return false;
+  switch (msAction) {
+    case WordSelectNavigator::MultiSelectAction::PhraseReady:
+      lookupOrPopup(msPhrase);
+      return true;
+    case WordSelectNavigator::MultiSelectAction::ExitedMultiSelect:
+    case WordSelectNavigator::MultiSelectAction::EnteredMultiSelect:
+      owner.requestUpdate();
+      return true;
+    default:
+      return true;
+  }
+}
+
+void DictionaryLookupController::lookupOrPopup(const std::string& rawWord) {
+  std::string cleaned = Dictionary::cleanWord(rawWord);
+  if (cleaned.empty()) {
+    showNoWordPopup();
+  } else {
+    startLookup(cleaned);
+  }
+}
+
+void DictionaryLookupController::showNoWordPopup() {
+  GUI.drawPopup(renderer, tr(STR_DICT_NO_WORD));
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  owner.requestUpdate();
+}
+
 void DictionaryLookupController::handleLookupFailed() {
   auto similar = Dictionary::findSimilar(lookupWord, 6, cachePath.c_str());
   if (!similar.empty()) {

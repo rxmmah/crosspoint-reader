@@ -379,20 +379,7 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
     }
   }
 
-  // Organise into rows by Y coordinate (each LayoutLine maps to one row)
-  if (!words.empty()) {
-    int16_t currentY = words[0].screenY;
-    rows.push_back({currentY, {}});
-    for (size_t i = 0; i < words.size(); i++) {
-      if (words[i].screenY != currentY) {
-        currentY = words[i].screenY;
-        rows.push_back({currentY, {}});
-      }
-      words[i].row = static_cast<int16_t>(rows.size() - 1);
-      rows.back().wordIndices.push_back(static_cast<int>(i));
-    }
-  }
-
+  WordSelectNavigator::organizeIntoRows(words, rows);
   navigator.load(std::move(words), std::move(rows), std::move(textPool));
 }
 
@@ -442,37 +429,13 @@ void DictionaryDefinitionActivity::loop() {
       requestUpdate();
     }
 
-    std::string msPhrase;
-    const auto msAction = navigator.handleMultiSelectInput(mappedInput, msPhrase);
-    if (msAction != WordSelectNavigator::MultiSelectAction::None) {
-      switch (msAction) {
-        case WordSelectNavigator::MultiSelectAction::PhraseReady: {
-          std::string cleaned = Dictionary::cleanWord(msPhrase);
-          if (cleaned.empty()) {
-            GUI.drawPopup(renderer, tr(STR_DICT_NO_WORD));
-            renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-            requestUpdate();
-          } else {
-            controller.startLookup(cleaned);
-          }
-          return;
-        }
-        case WordSelectNavigator::MultiSelectAction::ExitedMultiSelect:
-        case WordSelectNavigator::MultiSelectAction::EnteredMultiSelect:
-          requestUpdate();
-          return;
-        default:
-          return;
-      }
-    }
+    if (controller.handleMultiSelect(navigator)) return;
 
     if (!navigator.isMultiSelecting()) {
       if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
         const auto* sel = navigator.getSelected();
         if (!sel) return;
-        if (sel->lookupLen == 0) return;
-        controller.startLookup(navigator.getLookup(*sel));
+        controller.lookupOrPopup(navigator.getLookup(*sel));
         return;
       }
 

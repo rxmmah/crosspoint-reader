@@ -145,19 +145,7 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
     }
   }
 
-  if (words.empty()) return;
-
-  int16_t currentY = words[0].screenY;
-  rows.push_back({currentY, {}});
-
-  for (size_t i = 0; i < words.size(); i++) {
-    if (std::abs(words[i].screenY - currentY) > 2) {
-      currentY = words[i].screenY;
-      rows.push_back({currentY, {}});
-    }
-    words[i].row = static_cast<int16_t>(rows.size() - 1);
-    rows.back().wordIndices.push_back(static_cast<int>(i));
-  }
+  WordSelectNavigator::organizeIntoRows(words, rows);
 }
 
 void DictionaryWordSelectActivity::mergeHyphenatedWords(std::vector<WordSelectNavigator::WordInfo>& words,
@@ -284,47 +272,14 @@ void DictionaryWordSelectActivity::loop() {
     requestUpdate();
   }
 
-  std::string msPhrase;
-  const auto msAction = navigator.handleMultiSelectInput(mappedInput, msPhrase);
-  if (msAction != WordSelectNavigator::MultiSelectAction::None) {
-    switch (msAction) {
-      case WordSelectNavigator::MultiSelectAction::PhraseReady: {
-        std::string cleaned = Dictionary::cleanWord(msPhrase);
-        if (cleaned.empty()) {
-          GUI.drawPopup(renderer, tr(STR_DICT_NO_WORD));
-          renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-          vTaskDelay(1000 / portTICK_PERIOD_MS);
-          requestUpdate();
-        } else {
-          controller.startLookup(cleaned);
-        }
-        return;
-      }
-      case WordSelectNavigator::MultiSelectAction::ExitedMultiSelect:
-      case WordSelectNavigator::MultiSelectAction::EnteredMultiSelect:
-        requestUpdate();
-        return;
-      default:
-        return;
-    }
-  }
+  if (controller.handleMultiSelect(navigator)) return;
 
   if (navigator.isMultiSelecting()) return;
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const auto* sel = navigator.getSelected();
     if (!sel) return;
-    std::string cleaned = Dictionary::cleanWord(navigator.getLookup(*sel));
-
-    if (cleaned.empty()) {
-      GUI.drawPopup(renderer, tr(STR_DICT_NO_WORD));
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-      vTaskDelay(1000 / portTICK_PERIOD_MS);
-      requestUpdate();
-      return;
-    }
-
-    controller.startLookup(cleaned);
+    controller.lookupOrPopup(navigator.getLookup(*sel));
     return;
   }
 

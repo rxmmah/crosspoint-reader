@@ -47,6 +47,10 @@ class WordSelectNavigator {
   // Access null-terminated lookup text from the pool.
   const char* getLookup(const WordInfo& w) const { return textPool.data() + w.lookupOffset; }
 
+  // Organise a flat word list into rows by Y coordinate (2px tolerance).
+  // Sets each word's row field and populates the rows vector.
+  static void organizeIntoRows(std::vector<WordInfo>& words, std::vector<Row>& rows);
+
   // Append a null-terminated string to a text pool. Returns the offset.
   // Uses manual linear +256 growth to avoid std::string doubling.
   static uint16_t poolAppend(std::string& pool, const char* s, size_t len);

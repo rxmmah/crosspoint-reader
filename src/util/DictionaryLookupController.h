@@ -5,6 +5,7 @@
 #include <string>
 
 #include "LookupHistory.h"
+#include "WordSelectNavigator.h"
 
 class Activity;
 class GfxRenderer;
@@ -67,6 +68,16 @@ class DictionaryLookupController {
 
   // Inform the activity's skipLoopDelay() override.
   bool skipLoopDelay() const { return state == LookupState::LookingUp; }
+
+  // Show the "no word" popup with a 1-second delay, then request update.
+  void showNoWordPopup();
+
+  // Clean the word and start lookup; shows no-word popup if cleaning yields empty.
+  void lookupOrPopup(const std::string& rawWord);
+
+  // Handle multi-select input from the navigator. Returns true if input was consumed
+  // (caller should return from loop). Cleans the phrase and starts lookup or shows popup.
+  bool handleMultiSelect(WordSelectNavigator& navigator);
 
   const std::string& getLookupWord() const { return lookupWord; }
   const std::string& getFoundWord() const { return foundWord; }

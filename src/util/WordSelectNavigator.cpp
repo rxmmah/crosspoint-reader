@@ -16,6 +16,20 @@ void WordSelectNavigator::load(std::vector<WordInfo> w, std::vector<Row> r, std:
                          : 0;
 }
 
+void WordSelectNavigator::organizeIntoRows(std::vector<WordInfo>& words, std::vector<Row>& rows) {
+  if (words.empty()) return;
+  int16_t currentY = words[0].screenY;
+  rows.push_back({currentY, {}});
+  for (size_t i = 0; i < words.size(); i++) {
+    if (std::abs(words[i].screenY - currentY) > 2) {
+      currentY = words[i].screenY;
+      rows.push_back({currentY, {}});
+    }
+    words[i].row = static_cast<int16_t>(rows.size() - 1);
+    rows.back().wordIndices.push_back(static_cast<int>(i));
+  }
+}
+
 uint16_t WordSelectNavigator::poolAppend(std::string& pool, const char* s, size_t len) {
   uint16_t offset = static_cast<uint16_t>(pool.size());
   if (pool.size() + len + 1 > pool.capacity()) pool.reserve(pool.capacity() + 256);
