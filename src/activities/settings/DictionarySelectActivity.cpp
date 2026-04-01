@@ -155,8 +155,8 @@ void DictionarySelectActivity::scanDictionaries() {
       continue;
     }
 
-    // Scan the subdirectory for any .idx file — use the first one found.
-    // .ifo is not required; discovery is keyed on .idx presence only.
+    // Scan the subdirectory for .idx and .ifo files.
+    // Folders with multiple .idx or multiple .ifo files are ambiguous and skipped.
     char subPath[520];
     snprintf(subPath, sizeof(subPath), "%s/%s", dictRoot.c_str(), name);
     entry.close();
@@ -170,17 +170,20 @@ void DictionarySelectActivity::scanDictionaries() {
     subDir.rewindDirectory();
     char subName[256];  // bare filename, not full path — 256 is sufficient for FAT32
     char foundStem[256] = "";
-    bool multipleIdx = false;
+    bool ambiguous = false;
+    int ifoCount = 0;
     for (auto subEntry = subDir.openNextFile(); subEntry; subEntry = subDir.openNextFile()) {
       subEntry.getName(subName, sizeof(subName));
       const size_t subLen = strlen(subName);
       const bool isIdx = !subEntry.isDirectory() && subLen > 4 && strcmp(subName + subLen - 4, ".idx") == 0;
+      const bool isIfo = !subEntry.isDirectory() && subLen > 4 && strcmp(subName + subLen - 4, ".ifo") == 0;
       subEntry.close();
 
+      if (isIfo) ifoCount++;
       if (isIdx) {
         if (foundStem[0] != '\0') {
           // Second .idx found — folder is ambiguous, skip it.
-          multipleIdx = true;
+          ambiguous = true;
           LOG_DBG("DSEL", "Skipping %s: multiple .idx files found", name);
           break;
         }
@@ -190,7 +193,12 @@ void DictionarySelectActivity::scanDictionaries() {
     }
     subDir.close();
 
-    if (!multipleIdx && foundStem[0] != '\0') {
+    if (!ambiguous && ifoCount > 1) {
+      ambiguous = true;
+      LOG_DBG("DSEL", "Skipping %s: multiple .ifo files found", name);
+    }
+
+    if (!ambiguous && foundStem[0] != '\0') {
       dictFolders.push_back(std::string(name));
       dictStems.push_back(std::string(foundStem));
       LOG_DBG("DSEL", "Found dictionary: %s/%s", name, foundStem);

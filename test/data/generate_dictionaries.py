@@ -30,6 +30,7 @@ YAML schemas:
       corrupt_dict:    bool — write invalid bytes as .dict.dz instead of real content
       base_entries:    name of another JSON in test/data/dictionary-sources/ to load entries from
       extra_ifo_files: list of {stem, bookname, ifo_version?} for extra .ifo files
+      extra_idx_files: list of stem names for extra .idx file copies
     entries:           list of {headword, definition}  (omit when using base_entries)
     synonyms:          optional list of [synonym, canonical_headword]
 
@@ -220,6 +221,7 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
     generate_idx = meta.get("generate_idx", True)
     corrupt_dict = meta.get("corrupt_dict", False)
     extra_ifo_files = meta.get("extra_ifo_files", []) or []
+    extra_idx_files = meta.get("extra_idx_files", []) or []
 
     os.makedirs(out_dir, exist_ok=True)
     stem = os.path.join(out_dir, stem_name)
@@ -288,7 +290,7 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
     if generate_ifo:
         write_ifo(stem, meta, len(entries), len(idx_bytes), syn_count)
 
-    # Write extra .ifo files (for multi-ifo dicts)
+    # Write extra .ifo files (for multi-ifo test dict)
     for extra in extra_ifo_files:
         extra_stem = os.path.join(out_dir, extra["stem"])
         extra_meta = dict(meta)
@@ -296,6 +298,12 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
         if "ifo_version" in extra:
             extra_meta["ifo_version"] = extra["ifo_version"]
         write_ifo(extra_stem, extra_meta, len(entries), len(idx_bytes), syn_count)
+
+    # Write extra .idx copies (for multi-idx test dict)
+    for extra_stem_name in extra_idx_files:
+        extra_path = os.path.join(out_dir, extra_stem_name + ".idx")
+        with open(extra_path, "wb") as f:
+            f.write(idx_bytes)
 
     # Summary
     exts = []
@@ -319,6 +327,11 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
         if os.path.exists(extra_path):
             size = os.path.getsize(extra_path)
             print(f"  {extra['stem']}.ifo{'':<16}  {size/1024/1024:7.3f} MB")
+    for extra_stem_name in extra_idx_files:
+        extra_path = os.path.join(out_dir, extra_stem_name + ".idx")
+        if os.path.exists(extra_path):
+            size = os.path.getsize(extra_path)
+            print(f"  {extra_stem_name}.idx{'':<16}  {size/1024/1024:7.3f} MB")
 
 
 # ---------------------------------------------------------------------------

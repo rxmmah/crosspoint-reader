@@ -29,7 +29,7 @@
 <p>From the EPUB reader, look up word A. From A's definition screen, enter word-select mode and look up word B. Expected: B's definition appears. Press Back from B. Expected: A's definition re-appears (chain back). Press Back again. Expected: returns to word-select or reader (not B's definition). Confirm the history file contains both A and B entries.</p>
 
 <h2>Test J — History cap (eviction)</h2>
-<p>Set the History Limit setting to 25. Perform 26 distinct lookups. Open Lookup History. Expected: only 25 entries are shown; the oldest (first) lookup has been evicted.</p>
+<p>Set the Dictionary History Limit setting to 25. Perform 26 distinct lookups. Open Lookup History. Expected: only 25 entries are shown; the oldest (first) lookup has been evicted.</p>
 
 <h2>Test K — Done exits to reader</h2>
 <p>While viewing a chained definition (look up A, then B from A's definition), long-press Back (Done). Expected: exits directly to the EPUB reader, bypassing the history screen and word-select mode.</p>

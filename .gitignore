@@ -15,4 +15,3 @@ build
 .history/
 /.venv
 *.local*
-dictionaries/

@@ -31,8 +31,20 @@ It must appear in the picker list. Long-pressing it must show a
 <li>Confirm <em>only-dict</em> is absent from the list.</li>
 </ol>
 
-<h2>Test C: Folder with multiple .ifo files is hidden</h2>
-<p>The <em>multi-ifo</em> folder must not appear in the picker list.</p>
+<h2>Test C: Folder with multiple .idx files is hidden</h2>
+<p>The <em>multi-idx</em> folder has two .idx files. The scanner must skip it
+because the dictionary stem is ambiguous.</p>
+<h3>Dictionary</h3>
+<p><em>multi-idx</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Open the dictionary picker.</li>
+<li>Confirm <em>multi-idx</em> is absent from the list.</li>
+</ol>
+
+<h2>Test D: Folder with multiple .ifo files is hidden</h2>
+<p>The <em>multi-ifo</em> folder has two .ifo files. The scanner must skip it
+because the dictionary metadata is ambiguous.</p>
 <h3>Dictionary</h3>
 <p><em>multi-ifo</em></p>
 <h3>Steps</h3>
@@ -41,30 +53,32 @@ It must appear in the picker list. Long-pressing it must show a
 <li>Confirm <em>multi-ifo</em> is absent from the list.</li>
 </ol>
 
-<h2>Test D: All test dictionaries appear in picker</h2>
+<h2>Test E: All test dictionaries appear in picker</h2>
 <p>All of the following must be visible in the picker. Do not select any yet.</p>
 <h3>Words</h3>
 <ul>
-<li><em>prep-all</em></li>
-<li><em>english-no-syn</em></li>
 <li><em>en-es</em></li>
-<li><em>prep-extract-dict</em></li>
-<li><em>prep-syn-two-step</em></li>
-<li><em>prep-fail-decompress</em></li>
 <li><em>english-full</em></li>
+<li><em>english-no-syn</em></li>
+<li><em>html-definitions</em></li>
+<li><em>ipa-phonetic</em></li>
+<li><em>no-ifo</em></li>
+<li><em>overflow-fields</em></li>
+<li><em>phrase</em></li>
+<li><em>prep-all</em></li>
+<li><em>prep-extract-dict</em></li>
+<li><em>prep-fail-decompress</em></li>
 <li><em>prep-gen-idx</em></li>
 <li><em>prep-gen-syn</em></li>
 <li><em>prep-long</em></li>
 <li><em>prep-mini</em></li>
-<li><em>no-ifo</em></li>
-<li><em>overflow-fields</em></li>
-<li><em>phrase</em></li>
+<li><em>prep-syn-two-step</em></li>
 </ul>
 <h3>Note</h3>
 <p><em>prep-long</em> and <em>prep-mini</em> are for Ch 5 per-book prepare tests only.
 Do not select them from Settings.</p>
 
-<h2>Test E: Failed decompression -- error shown, prior selection unchanged</h2>
+<h2>Test F: Failed decompression -- error shown, prior selection unchanged</h2>
 <p>The preparation must fail with an error. The picker must remain open
 and the previously selected dictionary must be unchanged. No crash.</p>
 <h3>Dictionary</h3>
@@ -79,7 +93,7 @@ and the previously selected dictionary must be unchanged. No crash.</p>
 <li>Picker remains open. Previously selected dictionary is unchanged.</li>
 </ol>
 
-<h2>Test F: Metadata info view -- basic</h2>
+<h2>Test G: Metadata info view -- basic</h2>
 <p>Long-pressing a dictionary with a valid .ifo must open the parsed
 metadata info view showing at minimum: Name, Words, Alt Forms, and Type.</p>
 <h3>Dictionary</h3>
@@ -92,7 +106,7 @@ metadata info view showing at minimum: Name, Words, Alt Forms, and Type.</p>
 <li>Press Back. Picker reappears.</li>
 </ol>
 
-<h2>Test G: Metadata info view -- overflow fields</h2>
+<h2>Test H: Metadata info view -- overflow fields</h2>
 <p>All displayed fields must wrap correctly when their values are very long.
 No truncation. No crash.</p>
 <h3>Dictionary</h3>
@@ -106,7 +120,7 @@ No truncation. No crash.</p>
 <li>Press Back. Picker reappears.</li>
 </ol>
 
-<h2>Test H: Picker pagination</h2>
+<h2>Test I: Picker pagination</h2>
 <p>With enough test dictionaries present, the list spans more than one screen.
 Hold-Up and Hold-Down must page-jump without crash.</p>
 <h3>Note</h3>
@@ -119,7 +133,7 @@ on the SD card to create additional entries until the list spans two screens.</p
 <li>Hold Down. List jumps a page downward. No crash.</li>
 </ol>
 
-<h2>Test I: Metadata info view -- View Raw</h2>
+<h2>Test J: Metadata info view -- View Raw</h2>
 <p>From the parsed metadata info view, pressing <em>Confirm</em> must switch
 to the raw .ifo text view showing the unprocessed file contents.
 Pressing <em>Back</em> from the raw view must return to the parsed view.</p>
@@ -134,7 +148,7 @@ Pressing <em>Back</em> from the raw view must return to the parsed view.</p>
 <li>Press <em>Back</em>. Picker reappears.</li>
 </ol>
 
-<h2>Test J: Compressed dictionary shows "Compressed" status line</h2>
+<h2>Test K: Compressed dictionary shows "Compressed" status line</h2>
 <p>The info view for a compressed dictionary must include a "Compressed"
 status line in addition to the standard metadata fields.</p>
 <h3>Dictionary</h3>
@@ -147,7 +161,7 @@ status line in addition to the standard metadata fields.</p>
 <li>Press <em>Back</em>. Picker reappears.</li>
 </ol>
 
-<h2>Test K: "None found" when no dictionaries are present</h2>
+<h2>Test L: "None found" when no dictionaries are present</h2>
 <p>When no valid dictionary folders exist on the SD card, the picker
 must show a "None found" message rather than an empty list.</p>
 <h3>Note</h3>

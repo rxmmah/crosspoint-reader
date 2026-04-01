@@ -26,7 +26,7 @@ Minimum for lookup: `.dict` + `.idx`. Without `.ifo`, HTML definitions render as
 ```
 test/
   data/
-    dictionary-sources/               # 18 JSON source-of-truth files
+    dictionary-sources/               # 19 JSON source-of-truth files
     dictionary-epub-chapters/          # 22 HTML chapter files for test epub
     generate_dictionaries.py           # JSON sources -> test/dictionaries/
     generate_dictionary_test_epub.py   # HTML chapters -> test/epubs/test_dictionary.epub
@@ -44,7 +44,7 @@ scripts/
 
 ## Test Dictionaries
 
-18 test dictionaries, grouped by purpose:
+19 test dictionaries, grouped by purpose:
 
 ### Lookup content (used for word lookups in test chapters)
 
@@ -78,7 +78,8 @@ All prefixed `prep-` for alphabetical grouping in the on-device picker.
 |------|---------|
 | `no-ifo` | Missing .ifo — still appears in picker |
 | `only-dict` | Missing .idx — hidden from picker |
-| `multi-ifo` | Multiple .idx files — hidden from picker |
+| `multi-idx` | Multiple .idx files — hidden from picker |
+| `multi-ifo` | Multiple .ifo files — hidden from picker |
 | `overflow-fields` | Long .ifo field values — wrapping test |
 
 ## How to Add or Edit a Test Dictionary
