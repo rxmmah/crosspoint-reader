@@ -2,9 +2,9 @@
 """
 Generate test/epubs/test_dictionary.epub
 
-Chapter source files live in scripts/epub_chapters/:
+Chapter source files live in test/data/dictionary-epub-chapters/:
   cover.html, toc_notice.html  -- front matter (spine only, not in chapter browser)
-  ch01_*.html ... ch16_*.html  -- chapters, loaded in filename sort order
+  ch01_*.html ... ch20_*.html  -- chapters, loaded in filename sort order
 
 To add or edit a chapter, modify the corresponding .html file and re-run this script.
 """
@@ -12,8 +12,9 @@ To add or edit a chapter, modify the corresponding .html file and re-run this sc
 import glob, os, re, zipfile
 
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
-CHAPTERS_DIR = os.path.join(SCRIPT_DIR, "epub_chapters")
-OUT          = os.path.join(SCRIPT_DIR, "..", "test", "epubs", "test_dictionary.epub")
+CHAPTERS_DIR = os.path.join(SCRIPT_DIR, "dictionary-epub-chapters")
+WORKSPACE    = os.path.dirname(os.path.dirname(SCRIPT_DIR))
+OUT          = os.path.join(WORKSPACE, "test", "epubs", "test_dictionary.epub")
 
 # ---------------------------------------------------------------------------
 # Load chapter content

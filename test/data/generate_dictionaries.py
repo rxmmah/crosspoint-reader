@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-generate_test_dictionaries.py — Unified StarDict dictionary generator.
+generate_dictionaries.py — Unified StarDict dictionary generator.
 
-Reads a YAML data file from scripts/dicts/ and produces all StarDict binary files.
+Reads a JSON data file from test/data/dictionary-sources/ and produces all StarDict binary files.
 
 Usage:
-    python3 scripts/generate_test_dictionaries.py scripts/dicts/en_es.yaml   # one dict
-    python3 scripts/generate_test_dictionaries.py --all                      # all dicts in scripts/dicts/
+    python3 test/data/generate_dictionaries.py test/data/dictionary-sources/en-es.json   # one dict
+    python3 test/data/generate_dictionaries.py --all                                     # all in test/data/dictionary-sources/
 
 YAML schemas:
 
@@ -28,7 +28,7 @@ YAML schemas:
       generate_ifo:    bool — write .ifo file (default true)
       generate_idx:    bool — write .idx (and .idx.oft) (default true)
       corrupt_dict:    bool — write invalid bytes as .dict.dz instead of real content
-      base_entries:    name of another YAML in scripts/dicts/ to load entries from
+      base_entries:    name of another JSON in test/data/dictionary-sources/ to load entries from
       extra_ifo_files: list of {stem, bookname, ifo_version?} for extra .ifo files
     entries:           list of {headword, definition}  (omit when using base_entries)
     synonyms:          optional list of [synonym, canonical_headword]
@@ -481,7 +481,7 @@ def generate(yaml_path: str) -> None:
     meta = cfg["meta"]
     yaml_dir = os.path.dirname(os.path.abspath(yaml_path))
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    workspace_dir = os.path.dirname(script_dir)
+    workspace_dir = os.path.dirname(os.path.dirname(script_dir))
     out_dir = os.path.join(workspace_dir, meta["output_dir"])
 
     print(f"\n{'='*60}")
@@ -500,26 +500,26 @@ def generate(yaml_path: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Generate StarDict dictionaries from YAML data files in scripts/dicts/."
+        description="Generate StarDict dictionaries from JSON data files in test/data/dictionary-sources/."
     )
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("yaml_file", nargs="?",
-                       help="Path to a single YAML data file")
+    group.add_argument("json_file", nargs="?",
+                       help="Path to a single JSON data file")
     group.add_argument("--all", action="store_true",
-                       help="Generate all *.yaml files in scripts/dicts/")
+                       help="Generate all *.json files in test/data/dictionary-sources/")
     args = parser.parse_args()
 
     if args.all:
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        dicts_dir = os.path.join(script_dir, "dicts")
-        yaml_files = sorted(Path(dicts_dir).glob("*.json"))
+        sources_dir = os.path.join(script_dir, "dictionary-sources")
+        yaml_files = sorted(Path(sources_dir).glob("*.json"))
         if not yaml_files:
-            print(f"No YAML files found in {dicts_dir}", file=sys.stderr)
+            print(f"No JSON files found in {sources_dir}", file=sys.stderr)
             sys.exit(1)
         for yf in yaml_files:
             generate(str(yf))
     else:
-        generate(args.yaml_file)
+        generate(args.json_file)
 
 
 if __name__ == "__main__":
