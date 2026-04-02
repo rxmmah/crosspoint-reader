@@ -33,6 +33,7 @@ class TextBlock final : public Block {
   const std::vector<std::string>& getWords() const { return words; }
   const std::vector<int16_t>& getWordXpos() const { return wordXpos; }
   bool getIsRtl() const { return isRtl; }
+  const std::vector<EpdFontFamily::Style>& getWordStyles() const { return wordStyles; }
   bool isEmpty() override { return words.empty(); }
   size_t wordCount() const { return words.size(); }
   // given a renderer works out where to break the words into lines

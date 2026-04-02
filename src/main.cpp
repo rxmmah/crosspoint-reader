@@ -25,6 +25,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
+#include "util/Dictionary.h"
 #include "util/ScreenshotUtil.h"
 
 HalDisplay display;
@@ -91,6 +92,9 @@ EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont, 
 
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
+
+EpdFont ipaFont(&ipa_16_regular);
+EpdFontFamily ipaFontFamily(&ipaFont);
 
 EpdFont ui10RegularFont(&ubuntu_10_regular);
 EpdFont ui10BoldFont(&ubuntu_10_bold);
@@ -197,6 +201,7 @@ void setupDisplayAndFonts() {
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+  renderer.insertFont(IPA_FONT_ID, ipaFontFamily);
   LOG_DBG("MAIN", "Fonts setup");
 }
 
@@ -230,7 +235,15 @@ void setup() {
   HalSystem::clearPanic();  // TODO: move this to an activity when we have one to display the panic info
 
   SETTINGS.loadFromFile();
+  // Clamp lookup history cap to valid range
+  if (SETTINGS.lookupHistoryCap < CrossPointSettings::HIST_CAP_MIN ||
+      SETTINGS.lookupHistoryCap > CrossPointSettings::HIST_CAP_MAX ||
+      SETTINGS.lookupHistoryCap % CrossPointSettings::HIST_CAP_STEP != 0) {
+    SETTINGS.lookupHistoryCap = CrossPointSettings::HIST_CAP_DEFAULT;
+  }
   I18N.loadSettings();
+  // Validate the stored dictionary path still exists on the SD card.
+  Dictionary::isValidDictionary();
   KOREADER_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
