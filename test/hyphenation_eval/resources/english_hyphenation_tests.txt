@@ -1046,7 +1046,6 @@ wandered|wan=dered|4
 wandering|wan=der=ing|4
 warmth|warmth|4
 weapon|weapon|4
-weather|weather|4
 whitewash|white=wash|4
 whoever|who=ever|4
 windowsill|win=dowsill|4

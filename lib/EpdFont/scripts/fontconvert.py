@@ -576,7 +576,6 @@ def extract_ligatures_fonttools(font_path, codepoints):
         # Currently extracts 'liga' (standard) and 'rlig' (required) only.
         # To also extract discretionary or historical ligatures, add:
         #   'dlig' - Discretionary Ligatures (e.g., ft, st in Bookerly)
-        #   'hlig' - Historical Ligatures (e.g., long-s+t in OpenDyslexic)
         # These are off by default in standard text renderers.
         LIGATURE_FEATURES = ('liga', 'rlig')
         liga_lookup_indices = set()

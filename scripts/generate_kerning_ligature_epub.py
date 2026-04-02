@@ -468,7 +468,7 @@ over forty-seven years. Vera typed it up while Avery dictated.</p>
 <b>Ve</b> &#x2014; As in Venice, verse, venture.<br/>
 <b>Vo</b> &#x2014; As in Voice, volume, voyage.<br/>
 <b>Wa</b> &#x2014; As in Water, watch, wander.<br/>
-<b>We</b> &#x2014; As in Welcome, weather, welfare.<br/>
+<b>We</b> &#x2014; As in Welcome, welfare.<br/>
 <b>Wo</b> &#x2014; As in Wonder, worry, worship.<br/>
 <b>Ya</b> &#x2014; As in Yard, yacht, yawn.<br/>
 <b>Ye</b> &#x2014; As in Yellow, yesterday, yeoman.<br/>

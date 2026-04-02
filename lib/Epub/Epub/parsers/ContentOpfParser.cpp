@@ -108,7 +108,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   auto* self = static_cast<ContentOpfParser*>(userData);
   (void)atts;
 
-  try {
+ {
     if (self->state == START && (strcmp(name, "package") == 0 || strcmp(name, "opf:package") == 0)) {
       self->state = IN_PACKAGE;
       return;
@@ -337,16 +337,8 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       }
       return;
     }
-  } catch (const std::bad_alloc&) {
-    self->failParse("Out of memory while parsing content.opf");
-  } catch (const std::exception& ex) {
-    LOG_ERR("COF", "Exception while parsing content.opf: %s", ex.what());
-    self->failParse("Exception while parsing content.opf");
-  } catch (...) {
-    self->failParse("Unknown exception while parsing content.opf");
   }
 }
-
 void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, const int len) {
   auto* self = static_cast<ContentOpfParser*>(userData);
 

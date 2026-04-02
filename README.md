@@ -180,4 +180,3 @@ was making CrossPoint.
 
 ## Third-Party Attribution
 
-- Weather icon artwork used by the Weather activity is adapted from [weather-icons by Erik Flowers](https://github.com/erikflowers/weather-icons).
