@@ -40,6 +40,7 @@ class DictionaryWordSelectActivity final : public Activity {
   DictionaryLookupController controller;
 
   bool skipLoopDelay() override { return controller.skipLoopDelay(); }
+  bool ignoreConfirmUntilRelease = false; // Add this
 
   void extractWords(std::vector<WordSelectNavigator::WordInfo>& words, std::vector<WordSelectNavigator::Row>& rows,
                     std::string& textPool);

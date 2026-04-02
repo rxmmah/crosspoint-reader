@@ -24,6 +24,13 @@ void DictionaryWordSelectActivity::onEnter() {
   extractWords(words, rows, textPool);
   mergeHyphenatedWords(words, rows, textPool);
   navigator.load(std::move(words), std::move(rows), std::move(textPool));
+
+  // If launched via hold-to-lookup, the Confirm button is still pressed.
+  // We must ignore this held state to prevent immediate multi-select or lookup.
+  if (mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+    ignoreConfirmUntilRelease = true;
+  }
+
   requestUpdate();
 }
 
@@ -108,8 +115,8 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
           while (textEnd > start && textEnd <= wordText.size()) {
             if (textEnd >= 3 && static_cast<uint8_t>(wordText[textEnd - 3]) == 0xE2 &&
                 static_cast<uint8_t>(wordText[textEnd - 2]) == 0x80 &&
-                (static_cast<uint8_t>(wordText[textEnd - 1]) == 0x93 ||
-                 static_cast<uint8_t>(wordText[textEnd - 1]) == 0x94)) {
+                (static_cast<uint8_t>(wordText[textEnd - 1]) == 0x13 ||
+                 static_cast<uint8_t>(wordText[textEnd - 1]) == 0x14)) {
               textEnd -= 3;
             } else {
               break;
@@ -266,6 +273,16 @@ void DictionaryWordSelectActivity::loop() {
       finish();
     }
     return;
+  }
+
+  // FIX: Consume the launch-hold and the subsequent release event.
+  // While the button is held, we do nothing.
+  // Once it is released, we clear the flag and return immediately to consume that release frame.
+  if (ignoreConfirmUntilRelease) {
+    if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+      ignoreConfirmUntilRelease = false;
+    }
+    return; // Do not process navigation or lookup until the launch-hold is fully released.
   }
 
   if (navigator.handleNavigation(mappedInput, renderer)) {

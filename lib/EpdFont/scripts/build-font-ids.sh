@@ -29,3 +29,4 @@ echo "#define NOTOSANS_18_FONT_ID ($(calc_font_id ./notosans_18_regular.h ./noto
 echo "#define UI_10_FONT_ID ($(calc_font_id ./ubuntu_10_regular.h ./ubuntu_10_bold.h))"
 echo "#define UI_12_FONT_ID ($(calc_font_id ./ubuntu_12_regular.h ./ubuntu_12_bold.h))"
 echo "#define SMALL_FONT_ID ($(calc_font_id ./notosans_8_regular.h))"
+echo "#define IPA_FONT_ID ($(calc_font_id ./ipa_16_regular.h))"

@@ -54,26 +54,11 @@ void SettingsActivity::onEnter() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
-  {
-    auto dictSetting = SettingInfo::Action(StrId::STR_DICTIONARY, SettingAction::Dictionary);
-    dictSetting.stringGetter = [] {
-      std::string path = Dictionary::readDictPath();
-      if (path.empty()) return std::string(tr(STR_DICT_NONE));
-      // Path format: /dictionary/<folder>/<stem> — display the folder name.
-      const size_t lastSlash = path.rfind('/');
-      if (lastSlash == std::string::npos || lastSlash == 0) return path;
-      const size_t prevSlash = path.rfind('/', lastSlash - 1);
-      return (prevSlash != std::string::npos) ? path.substr(prevSlash + 1, lastSlash - prevSlash - 1)
-                                              : path.substr(0, lastSlash);
-    };
-    readerSettings.push_back(std::move(dictSetting));
-  }
   readerSettings.push_back(SettingInfo::Value(
+
       StrId::STR_LOOKUP_HIST_CAP, &CrossPointSettings::lookupHistoryCap,
       {CrossPointSettings::HIST_CAP_MIN, CrossPointSettings::HIST_CAP_MAX, CrossPointSettings::HIST_CAP_STEP},
       "lookupHistoryCap", StrId::STR_CAT_READER));
-  readerSettings.push_back(SettingInfo::Toggle(StrId::STR_DICT_HOLD_TO_LOOKUP, &CrossPointSettings::holdToLookup,
-                                               "holdToLookup", StrId::STR_CAT_READER));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
   // Reset selection to first category
@@ -217,8 +202,7 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
 
       case SettingAction::Dictionary:
-
-startActivityForResult(std::make_unique<DictionarySelectActivity>(renderer, mappedInput), resultHandler);
+        startActivityForResult(std::make_unique<DictionarySelectActivity>(renderer,mappedInput), resultHandler);
         break;
       case SettingAction::None:
         // Do nothing
