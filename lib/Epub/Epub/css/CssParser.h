@@ -117,6 +117,7 @@ class CssParser {
 
   // Individual property value parsers
   static CssTextAlign interpretAlignment(const std::string& val);
+  static CssDirection interpretDirection(const std::string& val);
   static CssFontStyle interpretFontStyle(const std::string& val);
   static CssFontWeight interpretFontWeight(const std::string& val);
   static CssTextDecoration interpretDecoration(const std::string& val);
