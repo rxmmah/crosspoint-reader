@@ -2,7 +2,9 @@
 
 #include <DictHtmlRenderer.h>
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
+#include <Logging.h>
 #include <Utf8.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -21,9 +23,218 @@
 
 static constexpr char kBullet[] = "- ";
 
+// Candidate SD card root directories for dictionaries (same as DictionarySelectActivity)
+static constexpr const char* DICT_ROOT_CANDIDATES[] = {
+    "/.dictionaries",
+    "/dictionaries",
+};
+
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
+  scanDictionaries();
+  findCurrentDictionaryIndex();
   wrapText();
+  requestUpdate();
+}
+
+// ---------------------------------------------------------------------------
+// Dictionary scanning (same logic as DictionarySelectActivity)
+// ---------------------------------------------------------------------------
+
+void DictionaryDefinitionActivity::scanDictionaries() {
+  dictFolders.clear();
+  dictFolders.reserve(8);
+  dictStems.clear();
+  dictStems.reserve(8);
+  dictRoot.clear();
+
+  for (const auto* candidate : DICT_ROOT_CANDIDATES) {
+    auto dir = Storage.open(candidate);
+    if (dir && dir.isDirectory()) {
+      dictRoot = candidate;
+      dir.close();
+      break;
+    }
+    if (dir) dir.close();
+  }
+
+  if (dictRoot.empty()) {
+    LOG_DBG("DDEF", "No dictionary directory found on SD card");
+    return;
+  }
+
+  auto root = Storage.open(dictRoot.c_str());
+  if (!root || !root.isDirectory()) {
+    if (root) root.close();
+    return;
+  }
+
+  root.rewindDirectory();
+
+  char name[500];
+  for (auto entry = root.openNextFile(); entry; entry = root.openNextFile()) {
+    entry.getName(name, sizeof(name));
+
+    if (!entry.isDirectory() || name[0] == '.') {
+      entry.close();
+      continue;
+    }
+
+    std::string subPath = dictRoot + "/" + name;
+    entry.close();
+
+    auto subDir = Storage.open(subPath.c_str());
+    if (!subDir || !subDir.isDirectory()) {
+      if (subDir) subDir.close();
+      continue;
+    }
+
+    subDir.rewindDirectory();
+    char subName[500];
+    char foundStem[500];
+    foundStem[0] = '\0';
+    bool ambiguous = false;
+    int ifoCount = 0;
+    for (auto subEntry = subDir.openNextFile(); subEntry; subEntry = subDir.openNextFile()) {
+      subEntry.getName(subName, sizeof(subName));
+      const size_t subLen = strlen(subName);
+      const bool isIdx = !subEntry.isDirectory() && subLen > 4 && strcmp(subName + subLen - 4, ".idx") == 0;
+      const bool isIfo = !subEntry.isDirectory() && subLen > 4 && strcmp(subName + subLen - 4, ".ifo") == 0;
+      subEntry.close();
+
+      if (isIfo) ifoCount++;
+      if (isIdx) {
+        if (foundStem[0] != '\0') {
+          ambiguous = true;
+          break;
+        }
+        subName[subLen - 4] = '\0';
+        strncpy(foundStem, subName, sizeof(foundStem) - 1);
+      }
+    }
+    subDir.close();
+
+    if (!ambiguous && ifoCount > 1) {
+      ambiguous = true;
+    }
+
+    if (!ambiguous && foundStem[0] != '\0') {
+      dictFolders.push_back(std::string(name));
+      dictStems.push_back(std::string(foundStem));
+    }
+  }
+
+  root.close();
+
+  // Sort alphabetically by folder name
+  if (dictFolders.size() > 1) {
+    std::vector<std::pair<std::string, std::string>> pairs;
+    pairs.reserve(dictFolders.size());
+    for (size_t i = 0; i < dictFolders.size(); i++) {
+      pairs.push_back({std::move(dictFolders[i]), std::move(dictStems[i])});
+    }
+    std::sort(pairs.begin(), pairs.end(), [](const auto& a, const auto& b) {
+      const char* s1 = a.first.c_str();
+      const char* s2 = b.first.c_str();
+      while (*s1 && *s2) {
+        char c1 = static_cast<char>(tolower(static_cast<unsigned char>(*s1)));
+        char c2 = static_cast<char>(tolower(static_cast<unsigned char>(*s2)));
+        if (c1 != c2) return c1 < c2;
+        s1++;
+        s2++;
+      }
+      return *s1 == '\0' && *s2 != '\0';
+    });
+    dictFolders.clear();
+    dictFolders.reserve(pairs.size());
+    dictStems.clear();
+    dictStems.reserve(pairs.size());
+    for (auto& p : pairs) {
+      dictFolders.push_back(std::move(p.first));
+      dictStems.push_back(std::move(p.second));
+    }
+  }
+}
+
+void DictionaryDefinitionActivity::findCurrentDictionaryIndex() {
+  currentDictIndex = -1;
+  const std::string currentPath = Dictionary::readDictPath(cachePath.empty() ? nullptr : cachePath.c_str());
+  if (currentPath.empty() || dictFolders.empty()) return;
+
+  for (int i = 0; i < static_cast<int>(dictFolders.size()); i++) {
+    std::string folderPath = dictRoot + "/" + dictFolders[i] + "/" + dictStems[i];
+    if (folderPath == currentPath) {
+      currentDictIndex = i;
+      break;
+    }
+  }
+}
+
+std::string DictionaryDefinitionActivity::getCurrentDictFolder() const {
+  if (currentDictIndex < 0 || currentDictIndex >= static_cast<int>(dictFolders.size())) return "";
+  return dictRoot + "/" + dictFolders[currentDictIndex] + "/" + dictStems[currentDictIndex];
+}
+
+std::string DictionaryDefinitionActivity::getCurrentDictName() const {
+  if (currentDictIndex < 0 || currentDictIndex >= static_cast<int>(dictFolders.size())) return "";
+  return dictFolders[currentDictIndex];
+}
+
+void DictionaryDefinitionActivity::switchToPrevDictionary() {
+  if (dictFolders.size() <= 1) return;
+  if (currentDictIndex < 0) return;
+  currentDictIndex = (currentDictIndex - 1 + dictFolders.size()) % dictFolders.size();
+  lookupInCurrentDictionary();
+}
+
+void DictionaryDefinitionActivity::switchToNextDictionary() {
+  if (dictFolders.size() <= 1) return;
+  if (currentDictIndex < 0) return;
+  currentDictIndex = (currentDictIndex + 1) % dictFolders.size();
+  lookupInCurrentDictionary();
+}
+
+void DictionaryDefinitionActivity::lookupInCurrentDictionary() {
+  const std::string folder = getCurrentDictFolder();
+  if (folder.empty()) return;
+
+  // Write the selected dictionary to per-book dictionary.bin (or global if no cache)
+  if (!cachePath.empty()) {
+    FsFile f;
+    if (Storage.openFileForWrite("DDEF", (cachePath + "/dictionary.bin").c_str(), f)) {
+      f.write(reinterpret_cast<const uint8_t*>(folder.c_str()), folder.size());
+      f.close();
+    } else {
+      LOG_ERR("DDEF", "Could not save per-book dictionary");
+    }
+  } else {
+    // No book cache - save to global
+    Dictionary::saveGlobalDictPath(folder.c_str());
+  }
+
+  // Lookup the same headword in the new dictionary
+  std::string newDef = Dictionary::lookup(headword, {}, cachePath.c_str());
+
+  // Try stem variants if direct lookup fails
+  if (newDef.empty()) {
+    auto stems = Dictionary::getStemVariants(headword);
+    for (const auto& stem : stems) {
+      newDef = Dictionary::lookup(stem, {}, cachePath.c_str());
+      if (!newDef.empty()) break;
+    }
+  }
+
+  // Try alternate forms if still not found
+  if (newDef.empty() && Dictionary::hasAltForms(cachePath.c_str())) {
+    std::string canonical = Dictionary::resolveAltForm(headword, cachePath.c_str());
+    if (!canonical.empty()) {
+      newDef = Dictionary::lookup(canonical, {}, cachePath.c_str());
+    }
+  }
+
+  definition = newDef.empty() ? std::string(tr(STR_DICT_NOT_FOUND)) : newDef;
+  wrapText();
+  currentPage = 0;
   requestUpdate();
 }
 
@@ -458,10 +669,10 @@ void DictionaryDefinitionActivity::loop() {
   }
 
   // --- View mode ---
-  const bool prevPage = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-                        mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool nextPage = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-                        mappedInput.wasReleased(MappedInputManager::Button::Right);
+  const bool prevPage = mappedInput.wasReleased(MappedInputManager::Button::PageBack);
+  const bool nextPage = mappedInput.wasReleased(MappedInputManager::Button::PageForward);
+  const bool prevDict = mappedInput.wasReleased(MappedInputManager::Button::Left);
+  const bool nextDict = mappedInput.wasReleased(MappedInputManager::Button::Right);
 
   if (prevPage && currentPage > 0) {
     currentPage--;
@@ -471,6 +682,17 @@ void DictionaryDefinitionActivity::loop() {
   if (nextPage && currentPage < totalPages - 1) {
     currentPage++;
     requestUpdate();
+  }
+
+  // Left/Right buttons switch between dictionaries
+  if (prevDict && dictFolders.size() > 1) {
+    switchToPrevDictionary();
+    return;
+  }
+
+  if (nextDict && dictFolders.size() > 1) {
+    switchToNextDictionary();
+    return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -527,11 +749,15 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
                                           SETTINGS.getDefinitionLineCompression());
   const int indentStep = renderer.getTextWidth(SETTINGS.getDefinitionFontId(), "   ");
 
-  // Header
+  // Header: show headword + current dictionary name
+  std::string headerText = headword;
+  if (dictFolders.size() > 1 && currentDictIndex >= 0) {
+    headerText += " (" + dictFolders[currentDictIndex] + ")";
+  }
   GUI.drawHeader(renderer,
                  Rect{contentX, hintGutterHeight + metrics.topPadding, renderer.getScreenWidth() - hintGutterWidth,
                       metrics.headerHeight},
-                 headword.c_str());
+                 headerText.c_str());
 
   // Body: draw layout lines for the current page (BW pass)
   const int startLine = currentPage * linesPerPage;
@@ -579,9 +805,21 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
                       renderer.getScreenHeight() - metrics.buttonHintsHeight - metrics.verticalSpacing, pageInfo);
   }
 
+  // Button hints: prioritize dictionary switching > page navigation
   const char* btn2 = showLookupButton ? tr(STR_LOOKUP_SHORT) : "";
-  const char* btn3 = totalPages > 1 ? tr(STR_DIR_UP) : "";
-  const char* btn4 = totalPages > 1 ? tr(STR_DIR_DOWN) : "";
+  const char* btn3;
+  const char* btn4;
+
+  if (dictFolders.size() > 1) {
+    // Multiple dictionaries: use Left/Right for dictionary switching
+    btn3 = tr(STR_DIR_LEFT);
+    btn4 = tr(STR_DIR_RIGHT);
+  } else {
+    // Single/no dictionary: use Left/Right for page navigation (if needed)
+    btn3 = totalPages > 1 ? tr(STR_DIR_UP) : "";
+    btn4 = totalPages > 1 ? tr(STR_DIR_DOWN) : "";
+  }
+
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), btn2, btn3, btn4);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 

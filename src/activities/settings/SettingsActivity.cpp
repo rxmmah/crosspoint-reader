@@ -59,6 +59,7 @@ void SettingsActivity::onEnter() {
       StrId::STR_LOOKUP_HIST_CAP, &CrossPointSettings::lookupHistoryCap,
       {CrossPointSettings::HIST_CAP_MIN, CrossPointSettings::HIST_CAP_MAX, CrossPointSettings::HIST_CAP_STEP},
       "lookupHistoryCap", StrId::STR_CAT_READER));
+  readerSettings.push_back(SettingInfo::Action(StrId::STR_DICTIONARY, SettingAction::Dictionary));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
   // Reset selection to first category

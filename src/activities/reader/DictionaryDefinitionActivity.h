@@ -41,6 +41,20 @@ class DictionaryDefinitionActivity final : public Activity {
   std::vector<std::string> chainWords;  // previous headwords for back-nav
   bool chainBackNavInProgress = false;
 
+  // Dictionary switching
+  std::string dictRoot;
+  std::vector<std::string> dictFolders;
+  std::vector<std::string> dictStems;
+  int currentDictIndex = -1;
+
+  void scanDictionaries();
+  void findCurrentDictionaryIndex();
+  std::string getCurrentDictFolder() const;
+  std::string getCurrentDictName() const;
+  void switchToPrevDictionary();
+  void switchToNextDictionary();
+  void lookupInCurrentDictionary();
+
   // A single styled run within a display line.
   struct LayoutSegment {
     std::string text;
