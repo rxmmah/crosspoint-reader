@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "BookmarkEntry.h"
+#include "DictionaryWordSelectActivity.h"
 #include "ChapterPosition.h"
 #include "EpubReaderMenuActivity.h"
 #include "ProgressMapper.h"
@@ -160,7 +161,11 @@ class EpubReaderActivity final : public ReaderActivity {
   std::string moreRowName(int row) const;
   std::string moreRowValue(int row) const;
   void activateMoreRow(int row);
-  void openDictionaryWordSelect();
+  // Opens word selection over the current page for dictionary lookup and/or
+  // passage highlighting (long-press Confirm functions and the reader menu).
+  void openWordSelect(DictionaryWordSelectActivity::Mode mode);
+  // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
+  // because no KOReader credentials are stored.
   bool launchKOReaderSync();
   unsigned long confirmLongPressThreshold() const;
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);

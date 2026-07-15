@@ -34,6 +34,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     INVERTED_BLACK_AND_WHITE = 2,
     SLEEP_SCREEN_COVER_FILTER_COUNT
   };
+  // Action for a short Back press on the home menu, where Back has no navigation target.
+  enum HOME_BACK_ACTION { HOME_BACK_NONE = 0, HOME_BACK_RESUME = 1, HOME_BACK_RECENTS = 2, HOME_BACK_ACTION_COUNT };
+
   enum STATUS_BAR_PROGRESS_BAR {
     BOOK_PROGRESS = 0,
     CHAPTER_PROGRESS = 1,
@@ -94,8 +97,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
 
   // Side button layout options
-  // Default: Up = Previous, Down = Next
-  enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTONS_DISABLED = 2, SIDE_BUTTON_LAYOUT_COUNT };
+  // Default: Up = Previous, Down = Next. NEXT_NEXT / PREV_PREV assign both
+  // buttons to the same direction for one-handed reading.
+  enum SIDE_BUTTON_LAYOUT {
+    PREV_NEXT = 0,
+    NEXT_PREV = 1,
+    SIDE_BUTTONS_DISABLED = 2,
+    NEXT_NEXT = 3,
+    PREV_PREV = 4,
+    SIDE_BUTTON_LAYOUT_COUNT
+  };
 
   // Font family options (built-in fonts only; SD card fonts use sdFontFamilyName)
   enum FONT_FAMILY { NOTOSERIF = 0, NOTOSANS = 1, FONT_FAMILY_COUNT };
@@ -140,7 +151,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     REFRESH_FREQUENCY_COUNT
   };
 
-  // Short power button press actions
+  // Short power button press actions. PWR_CONFIRM is only offered on touch
+  // boards (see SettingsList.h).
   enum SHORT_PWRBTN {
     IGNORE = 0,
     SLEEP = 1,
@@ -160,9 +172,15 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LP_MENU_DISABLED = 1,
     LP_MENU_BOOKMARK = 2,
     LP_MENU_DICTIONARY = 3,
-    LP_MENU_READER_MENU = 4,
+    LP_MENU_HIGHLIGHT = 4,
+    LP_MENU_DICT_HIGHLIGHT = 5,
+    LP_MENU_READER_MENU = 6,
     LONG_PRESS_MENU_FUNCTION_COUNT
   };
+
+  // Where HighlightStore appends saved passages: one markdown file per book
+  // under /Highlights, or a single /Highlights.md for everything.
+  enum HIGHLIGHT_FILE_MODE { HIGHLIGHT_FILE_PER_BOOK = 0, HIGHLIGHT_FILE_SINGLE = 1, HIGHLIGHT_FILE_MODE_COUNT };
 
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
@@ -176,7 +194,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
 
   // UI Theme
-  enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, ROUNDEDRAFF = 3 };
+  enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, ROUNDEDRAFF = 3, COVER_GRID = 4 };
 
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
@@ -188,12 +206,18 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   enum TILT_PAGE_TURN { TILT_OFF = 0, TILT_NORMAL = 1, TILT_NVERTED = 2, TILT_PAGE_TURN_COUNT };
 
-  enum TOUCH_READER_CONTROLS {
-    TOUCH_READER_OFF = 0,
-    TOUCH_READER_ON = 1,
-    TOUCH_READER_SWIPE = 2,
-    TOUCH_READER_INVERTED_TAP = 3,
-    TOUCH_READER_CONTROLS_COUNT
+  enum TOUCH_READER_CONTROLS { TOUCH_READER_OFF = 0, TOUCH_READER_ON = 1, TOUCH_READER_CONTROLS_COUNT };
+
+  // Per-direction reader page-turn gestures. INVERTED_TAP is tap-only; either
+  // direction set to it swaps both directions' shared tap zones (see
+  // ReaderUtils::detectTouchPageTurn).
+  enum PAGE_TURN_GESTURE {
+    TAP_AND_SWIPE = 0,
+    TAP_ONLY = 1,
+    SWIPE_ONLY = 2,
+    INVERTED_TAP = 3,
+    PAGE_TURN_GESTURE_DISABLED = 4,
+    PAGE_TURN_GESTURE_COUNT
   };
 
   // How the reader menu opens on touch boards. Persisted under the legacy
@@ -243,6 +267,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t clockHasBeenSynced = 0;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
+  static constexpr uint8_t WORD_SPACING_MIN = 50;
+  static constexpr uint8_t WORD_SPACING_MAX = 200;
+  static constexpr uint8_t WORD_SPACING_STEP = 25;
+  uint8_t wordSpacing = 100;                              // percent of the font's space advance
+  static constexpr uint8_t CHARACTER_SPACING_OFFSET = 2;  // stored 0..4 maps to -2..+2 px
+  uint8_t characterSpacing = CHARACTER_SPACING_OFFSET;
+  int8_t getCharacterSpacing() const { return static_cast<int8_t>(characterSpacing - CHARACTER_SPACING_OFFSET); }
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
@@ -284,9 +315,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t SCREEN_MARGIN_MAX = 40;
   static constexpr uint8_t SCREEN_MARGIN_STEP = 5;
   uint8_t screenMargin = SCREEN_MARGIN_MIN;
-  // OPDS download destination folder ("" = SD root). Global; edited from the
-  // OPDS server list. Persisted via a category-less SettingInfo::String in
-  // SettingsList.h, so it stays out of the on-device Settings screen.
+  // Default OPDS download destination folder ("" = SD root), used by every
+  // server that does not set a folder of its own (OpdsServer::downloadFolder).
+  // Edited from the OPDS server list and persisted via a category-less
+  // SettingInfo::String in SettingsList.h, so it stays out of the on-device
+  // Settings screen.
   char opdsDownloadFolder[64] = "";
   // On-disk filename format for OPDS downloads (0=Author-Title default, 1=Title-Author,
   // 2=Title). See OpdsFilenameFormat. Persisted via a category-less SettingInfo::Enum,
@@ -299,6 +332,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
+  // Highlight markdown output layout (HIGHLIGHT_FILE_MODE values)
+  uint8_t highlightFileMode = HIGHLIGHT_FILE_PER_BOOK;
   // UI Theme
   uint8_t uiTheme = LYRA;
   // Sunlight fading compensation
@@ -318,6 +353,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // in toJson/fromJson — its settings entry is only inserted when dictionaries
   // exist, so the generic SettingsList loop never sees it.
   uint8_t dictionaryFont = DICT_FONT_BOOK;
+  // SD card font family for dictionary definitions (empty = use dictionaryFont).
+  // Lets e.g. an Arabic family render en-ar definitions the built-in fonts have
+  // no glyphs for. Loaded on demand by SdCardFontSystem::acquireDictionaryFont()
+  // — getDictionaryFontId() alone cannot resolve it. Persisted manually.
+  char dictionarySdFontName[32] = "";
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // Show the title and author read from inside each book rather than its
@@ -329,12 +369,17 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t moveFinishedToReadFolder = 0;
   // Short press Back goes to file browser instead of home (0 = disabled, 1 = enabled)
   uint8_t backShortToFileBrowser = 0;
+  // What a short Back press does on the home menu (HOME_BACK_ACTION)
+  uint8_t homeBackAction = HOME_BACK_RESUME;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Tilt-based page turning (X3 only — requires QMI8658 IMU)
   uint8_t tiltPageTurn = TILT_OFF;
-  // Touch screen reader zones/gestures on boards with a touch controller.
-  uint8_t touchReaderControls = TOUCH_READER_SWIPE;
+  // Master reader-touch toggle on boards with a touch controller.
+  uint8_t touchReaderControls = TOUCH_READER_ON;
+  // Which gestures turn the page in each direction (PAGE_TURN_GESTURE).
+  uint8_t pageTurnGesture = SWIPE_ONLY;
+  uint8_t previousPageGesture = SWIPE_ONLY;
   // Reader menu open gesture (SHOW_READER_MENU: off / center tap / bottom-edge
   // up-swipe). Only surfaced on home-key boards, where Home is the capacitive
   // key and the bottom edge is free; elsewhere it stays at the Tap default.

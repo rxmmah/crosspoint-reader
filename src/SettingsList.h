@@ -17,6 +17,7 @@
 #include "KOReaderCredentialStore.h"
 #include "ReaderFontSizes.h"
 #include "activities/settings/SettingsActivity.h"
+#include "components/UITheme.h"
 #include "util/DictionaryRegistry.h"
 
 // Build the font family setting dynamically. When registry is non-null, SD card fonts
@@ -179,10 +180,84 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
   return s;
 }
 
+// Build the dictionary font setting: Book Font (follow the reader), the two
+// built-in families, plus any SD card families — an SD family is what makes
+// non-Latin dictionary definitions (e.g. Arabic) renderable when the book
+// font has no such glyphs. Selection persists across two fields like the
+// reader font: dictionarySdFontName when an SD family is chosen (loaded on
+// demand by SdCardFontSystem::acquireDictionaryFont), dictionaryFont
+// otherwise. Both are saved manually in CrossPointSettings::toJson/fromJson.
+inline SettingInfo buildDictionaryFontSetting(const SdCardFontRegistry* registry) {
+  SettingInfo s;
+  s.nameId = StrId::STR_DICTIONARY_FONT;
+  s.type = SettingType::ENUM;
+  s.key = "dictionaryFont";
+  s.category = StrId::STR_CAT_READER;
+
+  std::vector<std::string> sdFamilyNames;
+  if (registry) {
+    const auto& families = registry->getFamilies();
+    sdFamilyNames.reserve(families.size());
+    std::transform(families.begin(), families.end(), std::back_inserter(sdFamilyNames),
+                   [](const SdCardFontFamilyInfo& f) { return f.name; });
+  }
+
+  if (sdFamilyNames.empty()) {
+    s.enumValues = {StrId::STR_BOOK_FONT, StrId::STR_NOTO_SERIF, StrId::STR_NOTO_SANS};
+  } else {
+    s.enumStringValues.reserve(CrossPointSettings::DICTIONARY_FONT_COUNT + sdFamilyNames.size());
+    s.enumStringValues.push_back(I18N.get(StrId::STR_BOOK_FONT));
+    s.enumStringValues.push_back(I18N.get(StrId::STR_NOTO_SERIF));
+    s.enumStringValues.push_back(I18N.get(StrId::STR_NOTO_SANS));
+    s.enumStringValues.insert(s.enumStringValues.end(), sdFamilyNames.begin(), sdFamilyNames.end());
+  }
+
+  s.valueGetter = [sdFamilyNames]() -> uint8_t {
+    if (SETTINGS.dictionarySdFontName[0] != '\0') {
+      for (size_t i = 0; i < sdFamilyNames.size(); i++) {
+        // Compare within the settings field capacity: an over-long family name
+        // is stored truncated, and must still match its list entry.
+        if (strncmp(sdFamilyNames[i].c_str(), SETTINGS.dictionarySdFontName,
+                    sizeof(SETTINGS.dictionarySdFontName) - 1) == 0) {
+          return static_cast<uint8_t>(CrossPointSettings::DICTIONARY_FONT_COUNT + i);
+        }
+      }
+      // Name no longer on the card — show the fallback that will actually render.
+    }
+    return SETTINGS.dictionaryFont < CrossPointSettings::DICTIONARY_FONT_COUNT ? SETTINGS.dictionaryFont : 0;
+  };
+
+  s.valueSetter = [sdFamilyNames](uint8_t v) {
+    if (v < CrossPointSettings::DICTIONARY_FONT_COUNT) {
+      SETTINGS.dictionaryFont = v;
+      SETTINGS.dictionarySdFontName[0] = '\0';
+      return;
+    }
+    const size_t sdIdx = v - CrossPointSettings::DICTIONARY_FONT_COUNT;
+    if (sdIdx < sdFamilyNames.size()) {
+      strncpy(SETTINGS.dictionarySdFontName, sdFamilyNames[sdIdx].c_str(), sizeof(SETTINGS.dictionarySdFontName) - 1);
+      SETTINGS.dictionarySdFontName[sizeof(SETTINGS.dictionarySdFontName) - 1] = '\0';
+    }
+  };
+
+  return s;
+}
+
+// Reader Menu is the last entry and is only offered on boards with a home key.
+// The order must match CrossPointSettings::LONG_PRESS_MENU_FUNCTION, whose
+// indices are persisted.
 inline std::vector<StrId> buildLongPressMenuValues() {
-  static constexpr StrId VALUES[] = {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION,
-                                     StrId::STR_DICTIONARY, StrId::STR_READER_MENU};
+  static constexpr StrId VALUES[] = {StrId::STR_KOSYNC,     StrId::STR_DISABLED,  StrId::STR_BOOKMARK_OPTION,
+                                     StrId::STR_DICTIONARY, StrId::STR_HIGHLIGHT, StrId::STR_DICT_HIGHLIGHT,
+                                     StrId::STR_READER_MENU};
   const size_t count = BoardConfig::hasHomeKey() ? std::size(VALUES) : std::size(VALUES) - 1;
+  return {VALUES, VALUES + count};
+}
+
+inline std::vector<StrId> homeThemeValues() {
+  static constexpr StrId VALUES[] = {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
+                                     StrId::STR_THEME_ROUNDEDRAFF, StrId::STR_THEME_COVER_GRID};
+  const size_t count = UITheme::supportsCoverGrid() ? std::size(VALUES) : std::size(VALUES) - 1;
   return {VALUES, VALUES + count};
 }
 
@@ -235,10 +310,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
                            StrId::STR_PAGES_30, StrId::STR_NEVER},
                           "refreshFrequency", StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
-                          {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
-                           StrId::STR_THEME_ROUNDEDRAFF},
-                          "uiTheme", StrId::STR_CAT_DISPLAY),
+        SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme, homeThemeValues(), "uiTheme",
+                          StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY),
 #if FREEINK_CAP_FRONTLIGHT
@@ -263,6 +336,16 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacing,
                           {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE, StrId::STR_EXTRA_WIDE}, "lineSpacing",
                           StrId::STR_CAT_READER)
+            .withTextSettings(),
+        SettingInfo::Value(StrId::STR_WORD_SPACING, &CrossPointSettings::wordSpacing,
+                           {CrossPointSettings::WORD_SPACING_MIN, CrossPointSettings::WORD_SPACING_MAX,
+                            CrossPointSettings::WORD_SPACING_STEP},
+                           "wordSpacing", StrId::STR_CAT_READER)
+            .withTextSettings(),
+        SettingInfo::Enum(StrId::STR_CHARACTER_SPACING, &CrossPointSettings::characterSpacing,
+                          {StrId::STR_SPACING_MINUS_2, StrId::STR_SPACING_MINUS_1, StrId::STR_SPACING_ZERO,
+                           StrId::STR_SPACING_PLUS_1, StrId::STR_SPACING_PLUS_2},
+                          "characterSpacing", StrId::STR_CAT_READER)
             .withTextSettings(),
         SettingInfo::Value(StrId::STR_SCREEN_MARGIN, &CrossPointSettings::screenMargin,
                            {CrossPointSettings::SCREEN_MARGIN_MIN, CrossPointSettings::SCREEN_MARGIN_MAX,
@@ -296,17 +379,27 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
                           {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
                           "imageRendering", StrId::STR_CAT_READER),
+        SettingInfo::Enum(StrId::STR_HIGHLIGHT_FILE, &CrossPointSettings::highlightFileMode,
+                          {StrId::STR_HIGHLIGHT_FILE_PER_BOOK, StrId::STR_HIGHLIGHT_FILE_SINGLE}, "highlightFileMode",
+                          StrId::STR_CAT_READER),
         SettingInfo::Enum(StrId::STR_READER_MENU_STYLE, &CrossPointSettings::readerMenuStyle,
                           {StrId::STR_MENU_STYLE_LIST, StrId::STR_MENU_STYLE_TOOLBAR}, "readerMenuStyle",
                           StrId::STR_CAT_READER),
         // --- Controls ---
         SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
-                          {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED}, "sideButtonLayout",
-                          StrId::STR_CAT_CONTROLS),
-        SettingInfo::Enum(
-            StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
-            {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE, StrId::STR_STATE_INVERTED_TAP},
-            "touchReaderControls", StrId::STR_CAT_CONTROLS),
+                          {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED, StrId::STR_NEXT_NEXT,
+                           StrId::STR_PREV_PREV},
+                          "sideButtonLayout", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Toggle(StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
+                            "touchReaderControls", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_NEXT_PAGE_GESTURE, &CrossPointSettings::pageTurnGesture,
+                          {StrId::STR_TAP_AND_SWIPE, StrId::STR_TAP_ONLY, StrId::STR_SWIPE_ONLY,
+                           StrId::STR_INVERTED_TAP, StrId::STR_DISABLED},
+                          "pageTurnGesture", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_PREV_PAGE_GESTURE, &CrossPointSettings::previousPageGesture,
+                          {StrId::STR_TAP_AND_SWIPE, StrId::STR_TAP_ONLY, StrId::STR_SWIPE_ONLY,
+                           StrId::STR_INVERTED_TAP, StrId::STR_DISABLED},
+                          "previousPageGesture", StrId::STR_CAT_CONTROLS),
         // Persisted under the legacy "tapForReaderMenu" key: old saves map
         // 0 = Off, 1 = Tap.
         SettingInfo::Enum(StrId::STR_SHOW_READER_MENU, &CrossPointSettings::showReaderMenu,
@@ -342,6 +435,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_BACK_SHORT_TO_FILE_BROWSER, &CrossPointSettings::backShortToFileBrowser,
                             "backShortToFileBrowser", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_HOME_BACK_ACTION, &CrossPointSettings::homeBackAction,
+                          {StrId::STR_NONE_OPT, StrId::STR_RESUME, StrId::STR_MENU_RECENT_BOOKS}, "homeBackAction",
+                          StrId::STR_CAT_CONTROLS),
 
         // --- System ---
         SettingInfo::Value(
@@ -482,7 +578,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     // The reader menu style stays available on button boards (the toolbar
     // chrome is button-navigable); only the touch controls are hidden.
     v.erase(std::remove_if(v.begin(), v.end(),
-                           [](const SettingInfo& s) { return s.nameId == StrId::STR_TOUCH_READER_CONTROLS; }),
+                           [](const SettingInfo& s) {
+                             return s.nameId == StrId::STR_TOUCH_READER_CONTROLS ||
+                                    s.nameId == StrId::STR_NEXT_PAGE_GESTURE ||
+                                    s.nameId == StrId::STR_PREV_PAGE_GESTURE;
+                           }),
             v.end());
   }
   // The reader-menu gesture choice only makes sense where the menu stays
@@ -532,9 +632,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     // Definition font pin, right under the dictionary selector. Persisted
     // manually in CrossPointSettings::toJson/fromJson — this entry is absent
     // from the base list the generic persistence loop iterates.
-    v.insert(it + 1, SettingInfo::Enum(StrId::STR_DICTIONARY_FONT, &CrossPointSettings::dictionaryFont,
-                                       {StrId::STR_BOOK_FONT, StrId::STR_NOTO_SERIF, StrId::STR_NOTO_SANS},
-                                       "dictionaryFont", StrId::STR_CAT_READER));
+    v.insert(it + 1, buildDictionaryFontSetting(registry));
   }
   return v;
 }
