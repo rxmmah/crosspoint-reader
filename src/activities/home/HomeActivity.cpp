@@ -16,6 +16,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "KoofrCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
@@ -23,11 +24,14 @@
 #include "fontIds.h"
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // File Browser, Library, File transfer, Settings
+  int count = 4;  // Library, File Browser, Recents, Settings
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
   if (hasOpdsServers) {
+    count++;
+  }
+  if (hasKoofrCredentials) {
     count++;
   }
   return count;
@@ -114,12 +118,21 @@ void HomeActivity::onEnter() {
   Activity::onEnter();
 
   hasOpdsServers = OPDS_STORE.hasServers();
+  hasKoofrCredentials = KOOFR_STORE.hasCredentials();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(metrics.homeRecentBooksCount);
 
   const auto base = static_cast<int>(recentBooks.size());
-  selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
+  if (initialRecentIndex >= 0 && base > 0) {
+    // Clamp: the list can shrink while we're away (a book removed from recents,
+    // or its file gone from the SD card).
+    selectorIndex = std::min(initialRecentIndex, base - 1);
+  } else {
+    selectorIndex = initialMenuItem == HomeMenuItem::NONE
+                        ? 0
+                        : base + menuItemToIndex(initialMenuItem, hasOpdsServers, hasKoofrCredentials);
+  }
 
   // Trigger first update
   requestUpdate();
@@ -178,18 +191,21 @@ void HomeActivity::loop() {
       return;
     }
     const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
-    switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
+    switch (indexToMenuItem(menuIndex, hasOpdsServers, hasKoofrCredentials)) {
       case HomeMenuItem::FILE_BROWSER:
         onFileBrowserOpen();
         break;
       case HomeMenuItem::LIBRARY:
         onLibraryOpen();
         break;
+      case HomeMenuItem::RECENTS:
+        onRecentsOpen();
+        break;
       case HomeMenuItem::OPDS_BROWSER:
         onOpdsBrowserOpen();
         break;
-      case HomeMenuItem::FILE_TRANSFER:
-        onFileTransferOpen();
+      case HomeMenuItem::HIGHLIGHT_SYNC:
+        onHighlightSyncOpen();
         break;
       case HomeMenuItem::SETTINGS_MENU:
         onSettingsOpen();
@@ -221,12 +237,27 @@ void HomeActivity::loop() {
     return;
   }
 
-  // Back is otherwise unused on the home menu: open the most recently read
-  // book directly (recentBooks is most-recent-first and already pruned of
-  // files missing from the SD card).
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && !recentBooks.empty()) {
-    onSelectBook(recentBooks[0].path);
-    return;
+  // Back is otherwise unused on the home menu, so it runs the user's configured action.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    switch (SETTINGS.homeBackAction) {
+      case CrossPointSettings::HOME_BACK_RESUME:
+        // recentBooks is most-recent-first and already pruned of files missing
+        // from the SD card.
+        if (!recentBooks.empty()) {
+          onSelectBook(recentBooks[0].path);
+          return;
+        }
+        break;
+      case CrossPointSettings::HOME_BACK_RECENTS:
+        // Back is a shortcut, not a menu choice: the selector must be back where
+        // the user left it when the list closes, so hand the current selection
+        // to the Recents activity for its return trip.
+        openRecentsAndReturnToSelection();
+        return;
+      case CrossPointSettings::HOME_BACK_NONE:
+      default:
+        break;
+    }
   }
 
   const int coverColumnCount = std::max(1, metrics.homeRecentBooksCount);
@@ -305,13 +336,21 @@ void HomeActivity::render(RenderLock&&) {
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_LIBRARY), tr(STR_FILE_TRANSFER),
+  std::vector<const char*> menuItems = {tr(STR_LIBRARY), tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS),
                                         tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Library, Transfer, Settings};
+  // Bookshelf for the on-device library, Library for the OPDS catalogue below —
+  // the two entries need distinct icons.
+  std::vector<UIIcon> menuIcons = {Bookshelf, Folder, Recent, Settings};
 
   if (hasOpdsServers) {
-    menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
-    menuIcons.insert(menuIcons.begin() + 2, Blocks);
+    menuItems.insert(menuItems.begin() + 3, tr(STR_OPDS_BROWSER));
+    menuIcons.insert(menuIcons.begin() + 3, Library);
+  }
+
+  if (hasKoofrCredentials) {
+    // Sits directly before Settings, matching indexToMenuItem's ordering.
+    menuItems.insert(menuItems.end() - 1, tr(STR_KOOFR_SYNC_HIGHLIGHTS));
+    menuIcons.insert(menuIcons.end() - 1, BookmarkOutline);
   }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
@@ -330,8 +369,23 @@ void HomeActivity::render(RenderLock&&) {
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });
 
-  const auto labels = mappedInput.mapLabels(recentBooks.empty() ? "" : tr(STR_RESUME), tr(STR_SELECT), tr(STR_DIR_UP),
-                                            tr(STR_DIR_DOWN));
+  // Back's hint must match what it actually does. An empty label draws no
+  // button box at all, which is what HOME_BACK_NONE wants.
+  const char* backLabel = "";
+  switch (SETTINGS.homeBackAction) {
+    case CrossPointSettings::HOME_BACK_RESUME:
+      backLabel = recentBooks.empty() ? "" : tr(STR_RESUME);
+      break;
+    case CrossPointSettings::HOME_BACK_RECENTS:
+      // Short form: "Recent Books" is 129px wide and the hint box is only 106px.
+      backLabel = tr(STR_RECENTS_HINT);
+      break;
+    case CrossPointSettings::HOME_BACK_NONE:
+    default:
+      break;
+  }
+
+  const auto labels = mappedInput.mapLabels(backLabel, tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer(cleanInitialRefresh && !firstRenderDone ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
@@ -351,8 +405,21 @@ void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 
 void HomeActivity::onLibraryOpen() { activityManager.goToLibrary(); }
 
+void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
+
+void HomeActivity::openRecentsAndReturnToSelection() {
+  const int recentCount = static_cast<int>(recentBooks.size());
+  // Below recentCount the selector is on a recent book cover, which has no
+  // HomeMenuItem: send back the index instead.
+  const int recentIndex = selectorIndex < recentCount ? selectorIndex : -1;
+  const HomeMenuItem menuItem = recentIndex >= 0
+                                    ? HomeMenuItem::NONE
+                                    : indexToMenuItem(selectorIndex - recentCount, hasOpdsServers, hasKoofrCredentials);
+  activityManager.goToRecentBooks(menuItem, recentIndex);
+}
+
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 
-void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
-
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
+
+void HomeActivity::onHighlightSyncOpen() { activityManager.goToHighlightSync(); }

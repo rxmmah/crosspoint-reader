@@ -16,6 +16,7 @@ class HomeActivity final : public Activity {
   bool recentsLoaded = false;
   bool firstRenderDone = false;
   bool hasOpdsServers = false;
+  bool hasKoofrCredentials = false;
   bool coverRendered = false;      // Track if cover has been rendered once
   bool coverBufferStored = false;  // Track if cover buffer is stored
   uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
@@ -29,39 +30,48 @@ class HomeActivity final : public Activity {
   int coverRectH = 0;
   std::vector<RecentBook> recentBooks;
   const HomeMenuItem initialMenuItem;
+  // Recent book cover to select on entry, or -1 for none. Takes precedence over
+  // initialMenuItem: a cover is not a HomeMenuItem, so it needs its own index.
+  const int initialRecentIndex;
   const bool cleanInitialRefresh;
 
   // Convert HomeMenuItem to menu index (used in onEnter)
-  static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl) {
+  static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl, bool hasKoofr) {
     int i = 0;
+    if (item == HomeMenuItem::LIBRARY) return i;
+    ++i;
     if (item == HomeMenuItem::FILE_BROWSER) return i;
     ++i;
     if (item == HomeMenuItem::LIBRARY) return i;
     ++i;
     if (item == HomeMenuItem::OPDS_BROWSER) return hasOpdsUrl ? i : 0;
     if (hasOpdsUrl) ++i;
-    if (item == HomeMenuItem::FILE_TRANSFER) return i;
-    ++i;
+    if (item == HomeMenuItem::HIGHLIGHT_SYNC) return hasKoofr ? i : 0;
+    if (hasKoofr) ++i;
     if (item == HomeMenuItem::SETTINGS_MENU) return i;
     return 0;
   }
 
   // Convert menu index to HomeMenuItem (used in loop)
-  static HomeMenuItem indexToMenuItem(int idx, bool hasOpdsUrl) {
+  static HomeMenuItem indexToMenuItem(int idx, bool hasOpdsUrl, bool hasKoofr) {
     int i = 0;
+    if (idx == i++) return HomeMenuItem::LIBRARY;
     if (idx == i++) return HomeMenuItem::FILE_BROWSER;
     if (idx == i++) return HomeMenuItem::LIBRARY;
     if (hasOpdsUrl && idx == i++) return HomeMenuItem::OPDS_BROWSER;
-    if (idx == i++) return HomeMenuItem::FILE_TRANSFER;
+    if (hasKoofr && idx == i++) return HomeMenuItem::HIGHLIGHT_SYNC;
     if (idx == i) return HomeMenuItem::SETTINGS_MENU;
     return HomeMenuItem::NONE;
   }
   void onSelectBook(const std::string& path);
   void onFileBrowserOpen();
   void onLibraryOpen();
+  void onRecentsOpen();
+  // Open Recents such that returning from it restores the current selection.
+  void openRecentsAndReturnToSelection();
   void onSettingsOpen();
-  void onFileTransferOpen();
   void onOpdsBrowserOpen();
+  void onHighlightSyncOpen();
 
   int getMenuItemCount() const;
   bool storeCoverBuffer();    // Store frame buffer for cover image
@@ -72,10 +82,12 @@ class HomeActivity final : public Activity {
 
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                        HomeMenuItem initialMenuItemValue = HomeMenuItem::NONE, bool cleanInitialRefresh = false)
+                        HomeMenuItem initialMenuItemValue = HomeMenuItem::NONE, int initialRecentIndexValue = -1,
+                        bool cleanInitialRefreshValue = false)
       : Activity("Home", renderer, mappedInput),
         initialMenuItem(initialMenuItemValue),
-        cleanInitialRefresh(cleanInitialRefresh) {}
+        initialRecentIndex(initialRecentIndexValue),
+        cleanInitialRefresh(cleanInitialRefreshValue) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

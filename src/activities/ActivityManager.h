@@ -17,7 +17,7 @@
 class Activity;    // forward declaration
 class RenderLock;  // forward declaration
 
-enum class HomeMenuItem { NONE, FILE_BROWSER, LIBRARY, OPDS_BROWSER, FILE_TRANSFER, SETTINGS_MENU };
+enum class HomeMenuItem { NONE, FILE_BROWSER, LIBRARY, RECENTS, OPDS_BROWSER, HIGHLIGHT_SYNC, SETTINGS_MENU };
 
 /**
  * ActivityManager
@@ -26,7 +26,7 @@ enum class HomeMenuItem { NONE, FILE_BROWSER, LIBRARY, OPDS_BROWSER, FILE_TRANSF
  * manager is responsible for launching activities, and ensuring that only one activity is active at a time.
  *
  * It also provides a stack mechanism to allow activities to launch sub-activities and get back the results when the
- * sub-activity is done. For example, the WebServer activity can launch a WifiSelect activity to let the user choose a
+ * sub-activity is done. For example, an OPDS activity can launch a WifiSelect activity to let the user choose a
  * wifi network, and get back the selected network when the user is done.
  *
  * Main differences from Android's ActivityManager:
@@ -81,18 +81,27 @@ class ActivityManager {
   void replaceActivity(std::unique_ptr<Activity>&& newActivity);
 
   // goTo... functions are convenient wrapper for replaceActivity()
-  void goToFileTransfer();
   void goToUsbDrive();
   void goToSettings();
   void goToFileBrowser(std::string path = {});
   void goToLibrary();
+  // homeReturn* describe where the home selector should land when this activity
+  // goes back home, for callers (the home Back shortcut) that must not move it.
+  // See goHome() for the encoding.
+  void goToRecentBooks(HomeMenuItem homeReturnItem = HomeMenuItem::NONE, int homeReturnRecentIndex = -1);
   void goToBrowser();
+  void goToHighlightSync();
   void goToReader(std::string path, bool allowFastInitialRefresh = false);
   void goToSleep(bool fromTimeout = false);
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goToCrashReport();
-  void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE, bool cleanInitialRefresh = false);
+  // The home selector lands on initialMenuItem, or on the recent book at
+  // initialRecentIndex when that is >= 0 (which takes precedence, since a recent
+  // book cover is not a HomeMenuItem). cleanInitialRefresh forces a half refresh
+  // on the first render, to clear a lingering sleep image after wake.
+  void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE, int initialRecentIndex = -1,
+              bool cleanInitialRefresh = false);
 
   // This will move current activity to stack instead of deleting it
   void pushActivity(std::unique_ptr<Activity>&& activity);

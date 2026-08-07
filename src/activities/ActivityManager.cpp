@@ -6,6 +6,7 @@
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <Memory.h>
+#include <VectorFontSupport.h>
 
 #include <algorithm>
 
@@ -16,9 +17,10 @@
 #include "browser/OpdsBookBrowserActivity.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
+#include "home/HighlightSyncActivity.h"
 #include "home/HomeActivity.h"
+#include "home/RecentBooksActivity.h"
 #include "library/LibraryListActivity.h"
-#include "network/CrossPointWebServerActivity.h"
 #include "network/UsbDriveActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
@@ -35,11 +37,21 @@ void ActivityManager::begin() {
 #else
   constexpr BaseType_t renderTaskCore = 0;
 #endif
+#if CROSSPOINT_VECTOR_FONTS
+  // FreeType rasterization runs on this task, and the deepest observed chain
+  // is a glyph fault DURING LAYOUT: expat + parser + line-layout frames
+  // (~3.5KB on Xtensa) with the scan converter's FT_RENDER_POOL_SIZE (4KB)
+  // stack-resident band pool on top — a measured ~8KB peak that trips the
+  // canary on an 8KB stack. Vector-font boards all have PSRAM-class RAM.
+  constexpr uint32_t renderTaskStackBytes = 16384;
+#else
+  constexpr uint32_t renderTaskStackBytes = 8192;
+#endif
   xTaskCreatePinnedToCore(&renderTaskTrampoline, "ActivityManagerRender",
-                          8192,               // Stack size
-                          this,               // Parameters
-                          1,                  // Priority
-                          &renderTaskHandle,  // Task handle
+                          renderTaskStackBytes,  // Stack size
+                          this,                  // Parameters
+                          1,                     // Priority
+                          &renderTaskHandle,     // Task handle
                           renderTaskCore  // Keep long renders/cover decodes off CPU 0's idle watchdog when available
   );
   assert(renderTaskHandle != nullptr && "Failed to create render task");
@@ -226,10 +238,6 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
   }
 }
 
-void ActivityManager::goToFileTransfer() {
-  replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput));
-}
-
 void ActivityManager::goToUsbDrive() {
 #if FREEINK_CAP_USB_MSC
   auto activity = makeUniqueNoThrow<UsbDriveActivity>(renderer, mappedInput);
@@ -258,6 +266,10 @@ void ActivityManager::goToLibrary() {
   replaceActivity(std::move(activity));
 }
 
+void ActivityManager::goToRecentBooks(HomeMenuItem homeReturnItem, int homeReturnRecentIndex) {
+  replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput, homeReturnItem, homeReturnRecentIndex));
+}
+
 void ActivityManager::goToBrowser() {
   const auto& servers = OPDS_STORE.getServers();
   // Skip the server picker when there's only one server configured
@@ -266,6 +278,10 @@ void ActivityManager::goToBrowser() {
   } else {
     replaceActivity(std::make_unique<OpdsServerListActivity>(renderer, mappedInput, true));
   }
+}
+
+void ActivityManager::goToHighlightSync() {
+  replaceActivity(std::make_unique<HighlightSyncActivity>(renderer, mappedInput));
 }
 
 void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {
@@ -301,22 +317,27 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
   replaceActivity(std::make_unique<FullScreenMessageActivity>(renderer, mappedInput, std::move(message), style));
 }
 
-void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefresh) {
-  if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
+void ActivityManager::goHome(HomeMenuItem initialMenuItem, int initialRecentIndex, bool cleanInitialRefresh) {
+  // A caller-supplied recent book index is already an explicit selector target,
+  // so don't override it by guessing from the activity we're leaving.
+  if (initialMenuItem == HomeMenuItem::NONE && initialRecentIndex < 0 && currentActivity) {
     const auto& activityName = currentActivity->name;
     if (activityName == "FileBrowser") {
       initialMenuItem = HomeMenuItem::FILE_BROWSER;
     } else if (activityName == "Library") {
       initialMenuItem = HomeMenuItem::LIBRARY;
+    } else if (activityName == "RecentBooks") {
+      initialMenuItem = HomeMenuItem::RECENTS;
     } else if (activityName == "OpdsBookBrowser") {
       initialMenuItem = HomeMenuItem::OPDS_BROWSER;
-    } else if (activityName == "CrossPointWebServer") {
-      initialMenuItem = HomeMenuItem::FILE_TRANSFER;
+    } else if (activityName == "HighlightSync") {
+      initialMenuItem = HomeMenuItem::HIGHLIGHT_SYNC;
     } else if (activityName == "Settings") {
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
   }
-  replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem, cleanInitialRefresh));
+  replaceActivity(
+      std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem, initialRecentIndex, cleanInitialRefresh));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
 
