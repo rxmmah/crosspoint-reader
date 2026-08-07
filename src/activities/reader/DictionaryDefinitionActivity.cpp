@@ -8,13 +8,16 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "CrossPointSettings.h"
+#include "SdCardFontSystem.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/DictHtmlPages.h"
 #include "util/HtmlToPlainText.h"
+#include "util/VocabStore.h"
 
 namespace {
+
+// How long the save-outcome popup stays up, matching the word-select view's.
+constexpr unsigned long POPUP_DURATION_MS = 1500;
 
 // Longest measurable/drawable span. Wrapped lines stay under the screen width
 // (far below this); only pathological unbreakable tokens are split at this cap.
@@ -23,62 +26,34 @@ constexpr size_t MAX_LINE_BYTES = 191;
 // Body text left/right inset, matching the reader's default feel.
 constexpr int SIDE_PADDING = 20;
 
-// Styled-path ceiling: the laid-out Pages keep the whole definition resident
-// (TextBlock arenas ≈ text + ~7 bytes/word plus per-line objects), roughly
-// doubling the string's footprint while this activity is stacked over the
-// reader and word-select. Bigger definitions take the span-based plain-text
-// path, which holds no per-page copies.
-constexpr size_t MAX_STYLED_HTML_BYTES = 16 * 1024;
+// Feeds the watchdog during a blocking index build (see Dictionary::buildIndex).
+void indexBuildYield(void*) { vTaskDelay(1); }
 
 }  // namespace
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
+  bodyFontId = sdFontSystem.acquireDictionaryFont(renderer);
   // Normalize StarDict multi-type separators so the wrap loop and the
   // C-string font APIs below both see the whole definition.
   std::replace(definition.begin(), definition.end(), '\0', '\n');
-  if (!(htmlDefinition && definition.size() <= MAX_STYLED_HTML_BYTES && layoutHtmlPages())) {
-    definition = htmlToPlainText(definition);
-    wrapText();
+  definition = htmlToPlainText(definition);
+  wrapText();
+
+  DictionaryRegistry::discover(dictionaries);
+  for (size_t i = 0; i < dictionaries.size(); i++) {
+    if (dictionaries[i].name == sourceDictionary) {
+      dictIndex = static_cast<int>(i);
+      break;
+    }
   }
+
   requestUpdate();
 }
 
 void DictionaryDefinitionActivity::onExit() {
+  sdFontSystem.releaseDictionaryFont(renderer);
   Activity::onExit();
-  if (auto* fcm = renderer.getFontCacheManager()) {
-    fcm->releaseSdFontCaches();
-  }
-}
-
-DictionaryDefinitionActivity::BodyArea DictionaryDefinitionActivity::bodyArea() const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto orientation = renderer.getOrientation();
-  const bool isLandscape = orientation == GfxRenderer::Orientation::LandscapeClockwise ||
-                           orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
-  const bool isInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
-  const int hintGutterWidth = isLandscape ? metrics.sideButtonHintsWidth : 0;
-  const int topArea = (isInverted ? metrics.buttonHintsHeight : 0) + metrics.topPadding + metrics.headerHeight;
-  const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
-  return {renderer.getScreenWidth() - hintGutterWidth - 2 * SIDE_PADDING,
-          renderer.getScreenHeight() - topArea - bottomArea};
-}
-
-// Styled path: lay the HTML definition out through the EPUB chapter parser
-// into reader-identical Pages. Frees `definition` on success (the page arenas
-// own the text); any failure leaves state untouched for the plain-text path.
-bool DictionaryDefinitionActivity::layoutHtmlPages() {
-  const BodyArea body = bodyArea();
-  if (body.width <= 0 || body.height <= 0) return false;
-  if (!buildDictionaryHtmlPages(renderer, definition, static_cast<uint16_t>(body.width),
-                                static_cast<uint16_t>(body.height), pages)) {
-    return false;
-  }
-  definition.clear();
-  definition.shrink_to_fit();
-  totalPages = static_cast<int>(pages.size());
-  currentPage = 0;
-  return true;
 }
 
 int DictionaryDefinitionActivity::measureSpan(const int fontId, const char* text, size_t len) const {
@@ -97,17 +72,25 @@ void DictionaryDefinitionActivity::wrapText() {
   lines.clear();
   lines.reserve(definition.size() / 32 + 8);
 
-  const int fontId = SETTINGS.getDictionaryFontId();
+  const int fontId = bodyFontId;
   // SD-card fonts: merge every definition codepoint into the persistent
   // advance table up front. Otherwise each unseen codepoint measured below
   // falls back to an on-demand glyph load from SD (8-slot overflow ring).
   renderer.ensureSdCardFontReady(fontId, definition.c_str(), 0x01 /* REGULAR */);
 
-  const BodyArea body = bodyArea();
-  const int maxWidth = body.width;
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto orientation = renderer.getOrientation();
+  const bool isLandscape = orientation == GfxRenderer::Orientation::LandscapeClockwise ||
+                           orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  const bool isInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
+  const int hintGutterWidth = isLandscape ? metrics.sideButtonHintsWidth : 0;
+  const int maxWidth = renderer.getScreenWidth() - hintGutterWidth - 2 * SIDE_PADDING;
   const int spaceWidth = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR);
+
   const int lineHeight = renderer.getLineHeight(fontId);
-  linesPerPage = std::max(1, body.height / lineHeight);
+  const int topArea = (isInverted ? metrics.buttonHintsHeight : 0) + metrics.topPadding + metrics.headerHeight;
+  const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
+  linesPerPage = std::max(1, (renderer.getScreenHeight() - topArea - bottomArea) / lineHeight);
 
   const char* text = definition.c_str();
   const uint32_t n = static_cast<uint32_t>(definition.size());
@@ -198,52 +181,113 @@ void DictionaryDefinitionActivity::wrapText() {
 }
 
 void DictionaryDefinitionActivity::loop() {
+  // The popup owns the screen while it is up; swallow input until it expires.
+  if (popupVisible) {
+    if (millis() - popupTime >= POPUP_DURATION_MS) {
+      popupVisible = false;
+      requestUpdate();
+    }
+    return;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     finish();
     return;
   }
 
-  // Same tap zones as the reader page turns: left third = previous page,
-  // the rest = next. Back is the usual left-edge swipe.
-  int tx = 0;
-  int ty = 0;
-  if (mappedInput.wasScreenTapped(tx, ty)) {
-    if (tx < renderer.getScreenWidth() / 3) {
-      if (currentPage > 0) {
-        currentPage--;
-        requestUpdate();
-      }
-    } else if (currentPage + 1 < totalPages) {
-      currentPage++;
-      requestUpdate();
-    }
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) confirmPressSeen = true;
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && confirmPressSeen) {
+    saveToVocabulary();
     return;
   }
 
-  buttonNavigator.onNext([this] {
+  // Front Left/Right are dedicated to dictionary switching (below), so
+  // multi-page scrolling moves to the side buttons alone here — unlike most
+  // list activities, where Left/Right and side Up/Down both scroll the same
+  // axis via NavNext/NavPrevious.
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] {
     if (currentPage + 1 < totalPages) {
       currentPage++;
       requestUpdate();
     }
   });
-
-  buttonNavigator.onPrevious([this] {
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this] {
     if (currentPage > 0) {
       currentPage--;
       requestUpdate();
     }
   });
+
+  if (dictionaries.size() > 1 && dictIndex >= 0) {
+    // Same previous/next-to-physical-button convention mapLabels() uses, so
+    // the hint text drawn in render() always matches what actually happens.
+    const bool swapped = mappedInput.isNavDirectionSwapped();
+    if (mappedInput.wasPressed(swapped ? MappedInputManager::Button::Left : MappedInputManager::Button::Right)) {
+      switchDictionary(1);
+    } else if (mappedInput.wasPressed(swapped ? MappedInputManager::Button::Right : MappedInputManager::Button::Left)) {
+      switchDictionary(-1);
+    }
+  }
 }
 
-// Draws the current page: a styled Page when the HTML layout succeeded,
-// otherwise the wrapped line spans (copied into a stack buffer for NUL
+void DictionaryDefinitionActivity::saveToVocabulary() {
+  // Nothing worth filing when the panel is showing "Not found" / an error
+  // rather than a real entry.
+  if (!definitionShown) return;
+
+  const bool ok = savedCurrent || VocabStore::save(headword, definition);
+  savedCurrent = savedCurrent || ok;
+  popupMsg = ok ? StrId::STR_VOCAB_SAVED : StrId::STR_VOCAB_SAVE_FAILED;
+  popupVisible = true;
+  popupTime = millis();
+  requestUpdate();
+}
+
+void DictionaryDefinitionActivity::switchDictionary(const int direction) {
+  const int n = static_cast<int>(dictionaries.size());
+  dictIndex = (dictIndex + direction + n) % n;
+
+  // A different entry is about to replace the text on screen: it has not been
+  // saved, and the status lines painted below are not savable content.
+  savedCurrent = false;
+  definitionShown = false;
+
+  // Paint a status line before the (possibly slow, first-open) SD work below;
+  // same pattern as DictionaryWordSelectActivity::performLookup().
+  headword = dictionaries[dictIndex].name;
+  definition = tr(STR_DICT_LOOKING_UP);
+  wrapText();
+  requestUpdateAndWait();
+
+  bool ok = dict.open(dictionaries[dictIndex].name.c_str());
+  if (ok && dict.needsIndex()) {
+    definition = tr(STR_DICT_INDEXING);
+    wrapText();
+    requestUpdateAndWait();
+    ok = dict.buildIndex(&indexBuildYield);
+  }
+
+  std::string newDefinition;
+  std::string newHeadword;
+  const bool found = ok && dict.lookup(rawWord.c_str(), newDefinition, newHeadword);
+  if (found) {
+    headword = std::move(newHeadword);
+    definition = std::move(newDefinition);
+    std::replace(definition.begin(), definition.end(), '\0', '\n');
+    definition = htmlToPlainText(definition);
+    definitionShown = true;
+  } else {
+    headword = rawWord;
+    definition = ok ? tr(STR_DICT_NOT_FOUND) : tr(STR_DICT_ERROR);
+  }
+  wrapText();
+  requestUpdate();
+}
+
+// Draws the current page's line spans (copied into a stack buffer for NUL
 // termination). Called twice per render: once in font-cache scan mode, once
 // for the real paint.
 void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const int startY) const {
-  if (!pages.empty()) {
-    pages[currentPage]->render(renderer, fontId, x, startY);
-    return;
-  }
   const int lineHeight = renderer.getLineHeight(fontId);
   char buf[MAX_LINE_BYTES + 1];
   const int firstLine = currentPage * linesPerPage;
@@ -283,7 +327,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   // Body: two-pass draw inside a prewarm scope (same pattern as the reader's
   // renderContents) so SD-card font glyphs load from SD in one batch instead
   // of one on-demand overflow read per character on every page turn.
-  const int fontId = SETTINGS.getDictionaryFontId();
+  const int fontId = bodyFontId;
   const int bodyStartY = contentY + metrics.topPadding + metrics.headerHeight;
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
@@ -291,8 +335,24 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   scope.endScanAndPrewarm();
   drawBody(fontId, contentX + SIDE_PADDING, bodyStartY);
 
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_BACK), "", (currentPage > 0 ? "<" : ""), (currentPage + 1 < totalPages ? ">" : ""));
+  // Left/Right hint the adjacent dictionary by name (what pressing it
+  // switches to), not a generic arrow — the button no longer pages text.
+  std::string prevLabel;
+  std::string nextLabel;
+  if (dictionaries.size() > 1 && dictIndex >= 0) {
+    const int n = static_cast<int>(dictionaries.size());
+    prevLabel = dictionaries[(dictIndex - 1 + n) % n].name;
+    nextLabel = dictionaries[(dictIndex + 1) % n].name;
+  }
+  const char* confirmLabel = definitionShown ? tr(STR_VOCAB_SAVE) : "";
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, prevLabel.c_str(), nextLabel.c_str());
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  if (popupVisible) {
+    // drawPopup overlays the framebuffer and refreshes the display itself.
+    // I18N.get directly: tr() only accepts literal key names.
+    GUI.drawPopup(renderer, I18N.get(popupMsg));
+    return;
+  }
   renderer.displayBuffer();
 }
