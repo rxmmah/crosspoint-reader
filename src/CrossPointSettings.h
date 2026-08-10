@@ -30,8 +30,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     INVERTED_BLACK_AND_WHITE = 2,
     SLEEP_SCREEN_COVER_FILTER_COUNT
   };
-  enum DISPLAY_MODE { DISPLAY_MODE_LIGHT = 0, DISPLAY_MODE_DARK = 1, DISPLAY_MODE_COUNT };
-
   // Action for a short Back press on the home menu, where Back has no navigation target.
   enum HOME_BACK_ACTION { HOME_BACK_NONE = 0, HOME_BACK_RESUME = 1, HOME_BACK_RECENTS = 2, HOME_BACK_ACTION_COUNT };
 
@@ -190,8 +188,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
-  // Display output polarity. Sleep screens are always rendered in light mode.
-  uint8_t displayMode = DISPLAY_MODE_LIGHT;
+  // Night mode: inverted output polarity on the reading surfaces only
+  // (resolved per render by ActivityManager via Activity::appliesNightMode).
+  uint8_t screenInverted = 0;
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter

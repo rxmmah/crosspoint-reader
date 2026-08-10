@@ -103,14 +103,13 @@ bool Dictionary::open(const char* folderName) {
     LOG_ERR("DICT", "%s uses 64-bit index offsets (unsupported)", resolved.c_str());
     return false;
   }
-  hasSyn = Storage.exists((resolved + ".syn").c_str());
-
   // Checked once here so buildPath() can never fail on the lookup path.
   if (resolved.size() + LONGEST_SUFFIX_LEN + 1 > PATH_BUF_BYTES) {
     LOG_ERR("DICT", "Dictionary path too long (%u chars, max %u)", static_cast<unsigned>(resolved.size()),
             static_cast<unsigned>(PATH_BUF_BYTES - LONGEST_SUFFIX_LEN - 1));
     return false;
   }
+  hasSyn = Storage.exists((resolved + ".syn").c_str());
 
   basePath = std::move(resolved);
   return true;
@@ -128,7 +127,10 @@ bool Dictionary::buildPath(char* buf, size_t bufSize, const char* suffix) const 
 // A sidecar is stale when it is missing, unreadable, the wrong version, or built
 // from a different source size. Missing source returns false (not stale): the
 // dictionary is unusable without its .idx, and a vanished .syn degrades to no
-// synonyms — neither is fixable by re-indexing here.
+// synonyms — neither is fixable by re-indexing here. This is the same rule
+// openSession() applies to .qidx (a successful build always writes at least
+// entry 0, so sampleCount == 0 means absent, stale or corrupt), expressed over a
+// path so it can cover the .syn/.sidx pair too.
 bool Dictionary::sidecarIsStale(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic) {
   HalFile src;
   if (!Storage.openFileForRead("DICT", sourcePath, src)) return false;
@@ -147,11 +149,12 @@ bool Dictionary::needsIndex() {
 }
 
 bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx, IndexResult* outResult) {
-  if (outResult) *outResult = IndexResult::Ok;
-  if (!isOpen()) {
-    if (outResult) *outResult = IndexResult::ReadError;
+  const auto fail = [outResult](IndexResult r) {
+    if (outResult) *outResult = r;
     return false;
-  }
+  };
+  if (outResult) *outResult = IndexResult::Ok;
+  if (!isOpen()) return fail(IndexResult::ReadError);
 
   // The .idx sidecar is mandatory — lookups binary-search it. Rebuild only when
   // stale so a .syn-only change doesn't force a needless rescan of the (much
@@ -162,15 +165,14 @@ bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx, IndexResult* outR
   }
 
   // The synonym sidecar is best-effort: a failure here (e.g. transient OOM)
-  // leaves synonym lookups disabled but the dictionary otherwise usable. Clear
-  // hasSyn so this session's lookups skip locateSynonym() rather than falling
-  // back to a full linear .syn scan on every miss; needsIndex() still reports it
-  // stale, so the next open() retries the build. Not reported through
-  // *outResult — only the mandatory .idx build failure is fatal to the caller.
+  // leaves synonym lookups disabled but the dictionary otherwise usable, so it
+  // does not fail the build or overwrite *outResult. hasSyn is left alone — it
+  // means "a .syn file exists", so needsIndex() keeps reporting the sidecar
+  // stale and a later build retries. openSynonyms() is what declines the
+  // synonym path while the sidecar is unusable.
   if (hasSyn && sidecarIsStale(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC) &&
       !buildSidecar(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC, 4, yieldFn, ctx, nullptr)) {
     LOG_ERR("DICT", "Synonym index build failed; synonyms disabled for %s", basePath.c_str());
-    hasSyn = false;
   }
   return true;
 }
@@ -292,9 +294,75 @@ bool Dictionary::openSession(LookupSession& session) {
   if (!buildPath(path, sizeof(path), ".qidx")) return true;
   if (Storage.openFileForRead("DICT", path, session.qidx)) {
     const SidecarHeader header = readSidecarHeader(session.qidx, QIDX_MAGIC, SAMPLE_INTERVAL);
-    if (header.valid && header.sourceFileSize == session.idxSize) session.sampleCount = header.sampleCount;
+    if (header.valid && header.sourceFileSize == session.idxSize) {
+      session.sampleCount = header.sampleCount;
+      session.entryCount = header.entryCount;
+    }
   }
   return true;
+}
+
+bool Dictionary::openSynonyms(LookupSession& session) {
+  if (session.synOpened) return session.synSize > 0;
+  session.synOpened = true;
+  if (!hasSyn) return false;
+
+  char path[PATH_BUF_BYTES];
+  if (!buildPath(path, sizeof(path), ".syn") || !Storage.openFileForRead("DICT", path, session.syn)) {
+    // A .syn exists but won't open: the synonym probe never reached a verdict, so
+    // flag it the way openSession() flags an unopenable .idx rather than let
+    // lookup() report a genuine miss for a word the .syn does carry.
+    session.synFailed = true;
+    return false;
+  }
+  session.synSize = static_cast<uint32_t>(session.syn.fileSize());
+
+  if (buildPath(path, sizeof(path), ".sidx") && Storage.openFileForRead("DICT", path, session.sidx)) {
+    const SidecarHeader header = readSidecarHeader(session.sidx, SIDX_MAGIC, SAMPLE_INTERVAL);
+    if (header.valid && header.sourceFileSize == session.synSize) session.synSampleCount = header.sampleCount;
+  }
+
+  // Unlike .qidx, whose absence only costs locate() a bounded-cost scan of an
+  // already-open file, an unusable .sidx would make every miss read the whole
+  // .syn a byte at a time under the storage mutex. Decline the synonym path
+  // instead and release both handles; needsIndex() still reports .sidx stale, so
+  // the next index pass rebuilds it.
+  if (session.synSampleCount == 0) {
+    LOG_ERR("DICT", "Synonym index unusable for %s; synonyms skipped", basePath.c_str());
+    session.synFailed = true;
+    session.synSize = 0;
+    session.sidx.close();
+    session.syn.close();
+    return false;
+  }
+  return true;
+}
+
+// Shared by locate() (.qidx over .idx) and locateSynonym() (.sidx over .syn):
+// both sidecars have the same layout and both sources are sorted word-first, so
+// the descent is identical and only the file pair differs.
+uint32_t Dictionary::bisectSamples(HalFile& sidecar, HalFile& source, uint32_t sampleCount, const char* target) {
+  uint32_t startByte = 0;
+  if (sampleCount == 0) return startByte;  // no usable sidecar: scan from the start
+
+  uint32_t lo = 0;
+  uint32_t hi = sampleCount - 1;
+  while (lo < hi) {
+    const uint32_t mid = (lo + hi + 1) / 2;
+    uint32_t offset = 0;
+    if (!readSampleOffset(sidecar, mid, &offset) || !source.seekSet(offset) ||
+        readWordInto(source, wordBuf, sizeof(wordBuf)) < 0) {
+      lo = 0;  // unreadable sample: abandon the descent and scan from the start
+      break;
+    }
+    if (StringUtils::asciiCaseCmp(wordBuf, target) <= 0) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  readSampleOffset(sidecar, lo, &startByte);
+  return startByte;
 }
 
 // Both files stay open across the stem-variant probes; every read below seeks
@@ -303,27 +371,7 @@ DictLocation Dictionary::locate(LookupSession& session, const char* target, std:
   DictLocation result;
 
   // Bisect the sampled offsets to the last sample whose headword <= target.
-  // Falls back to a full scan from byte 0 when the sidecar is unusable.
-  uint32_t startByte = 0;
-  if (session.sampleCount > 0) {
-    uint32_t lo = 0;
-    uint32_t hi = session.sampleCount - 1;
-    while (lo < hi) {
-      const uint32_t mid = (lo + hi + 1) / 2;
-      uint32_t offset = 0;
-      if (!readSampleOffset(session.qidx, mid, &offset) || !session.idx.seekSet(offset) ||
-          readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0) {
-        lo = 0;
-        break;
-      }
-      if (StringUtils::asciiCaseCmp(wordBuf, target) <= 0) {
-        lo = mid;
-      } else {
-        hi = mid - 1;
-      }
-    }
-    readSampleOffset(session.qidx, lo, &startByte);
-  }
+  const uint32_t startByte = bisectSamples(session.qidx, session.idx, session.sampleCount, target);
 
   // Linear scan of at most SAMPLE_INTERVAL entries: headword NUL, BE32 offset,
   // BE32 size. The index is sorted, so stop at the first headword > target.
@@ -354,16 +402,8 @@ DictLocation Dictionary::locate(LookupSession& session, const char* target, std:
   return result;
 }
 
-DictLocation Dictionary::locateByOrdinal(uint32_t ordinal, std::string* matchedHeadwordOut) {
+DictLocation Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordinal, std::string* matchedHeadwordOut) {
   DictLocation result;
-  if (!isOpen()) return result;
-
-  HalFile idx;
-  if (!Storage.openFileForRead("DICT", basePath + ".idx", idx)) {
-    result.readError = true;
-    return result;
-  }
-  const uint32_t idxSize = static_cast<uint32_t>(idx.fileSize());
 
   // The .qidx samples are taken at fixed entry-count boundaries (every
   // SAMPLE_INTERVAL entries), so sample (ordinal / SAMPLE_INTERVAL) lands on
@@ -371,34 +411,31 @@ DictLocation Dictionary::locateByOrdinal(uint32_t ordinal, std::string* matchedH
   // remainder. Without a usable sidecar, count entries from byte 0.
   uint32_t startByte = 0;
   uint32_t startOrdinal = 0;
-  HalFile qidx;
-  if (Storage.openFileForRead("DICT", basePath + ".qidx", qidx)) {
-    const SidecarHeader header = readSidecarHeader(qidx, QIDX_MAGIC, SAMPLE_INTERVAL);
-    if (header.valid && header.sourceFileSize == idxSize && header.sampleCount > 0) {
-      if (header.entryCount != 0 && ordinal >= header.entryCount) return result;  // out of range
-      uint32_t sampleIndex = ordinal / SAMPLE_INTERVAL;
-      if (sampleIndex >= header.sampleCount) sampleIndex = header.sampleCount - 1;
-      if (readSampleOffset(qidx, sampleIndex, &startByte)) {
-        startOrdinal = sampleIndex * SAMPLE_INTERVAL;
-      } else {
-        startByte = 0;
-      }
+  if (session.sampleCount > 0) {
+    if (session.entryCount != 0 && ordinal >= session.entryCount) return result;  // out of range
+    uint32_t sampleIndex = ordinal / SAMPLE_INTERVAL;
+    if (sampleIndex >= session.sampleCount) sampleIndex = session.sampleCount - 1;
+    if (readSampleOffset(session.qidx, sampleIndex, &startByte)) {
+      startOrdinal = sampleIndex * SAMPLE_INTERVAL;
+    } else {
+      startByte = 0;
     }
   }
 
   // Each entry is headword NUL + BE32 offset + BE32 size. Skip to the target,
   // guarding against EOF for a malformed .syn ordinal past the last entry.
-  if (!idx.seekSet(startByte)) {
+  if (!session.idx.seekSet(startByte)) {
+    LOG_ERR("DICT", "Index seek to %lu failed", static_cast<unsigned long>(startByte));
     result.readError = true;
     return result;
   }
   uint8_t suffix[8];
   for (uint32_t e = startOrdinal; e < ordinal; e++) {
-    if (readWordInto(idx, wordBuf, sizeof(wordBuf)) < 0 || idx.read(suffix, 8) != 8) return result;
-    if (static_cast<uint32_t>(idx.position()) >= idxSize) return result;  // ordinal past last entry
+    if (readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0 || session.idx.read(suffix, 8) != 8) return result;
+    if (static_cast<uint32_t>(session.idx.position()) >= session.idxSize) return result;  // ordinal past last entry
   }
-  if (static_cast<uint32_t>(idx.position()) >= idxSize) return result;
-  if (readWordInto(idx, wordBuf, sizeof(wordBuf)) < 0 || idx.read(suffix, 8) != 8) return result;
+  if (static_cast<uint32_t>(session.idx.position()) >= session.idxSize) return result;
+  if (readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0 || session.idx.read(suffix, 8) != 8) return result;
   result.offset = readBe32(suffix);
   result.size = readBe32(suffix + 4);
   result.found = true;
@@ -406,58 +443,32 @@ DictLocation Dictionary::locateByOrdinal(uint32_t ordinal, std::string* matchedH
   return result;
 }
 
-DictLocation Dictionary::locateSynonym(const char* target, std::string* matchedHeadwordOut) {
+DictLocation Dictionary::locateSynonym(LookupSession& session, const char* target, std::string* matchedHeadwordOut) {
   DictLocation result;
-  if (!isOpen() || !hasSyn) return result;
-
-  HalFile syn;
-  if (!Storage.openFileForRead("DICT", basePath + ".syn", syn)) {
-    result.readError = true;
+  if (!openSynonyms(session)) {
+    result.readError = session.synFailed;  // false when there is simply no .syn
     return result;
   }
-  const uint32_t synSize = static_cast<uint32_t>(syn.fileSize());
 
-  // Bisect the sampled offsets to the last synonym <= target, mirroring
-  // locate(). Falls back to a full scan from byte 0 when the sidecar is unusable.
-  uint32_t startByte = 0;
-  HalFile sidx;
-  if (Storage.openFileForRead("DICT", basePath + ".sidx", sidx)) {
-    const SidecarHeader header = readSidecarHeader(sidx, SIDX_MAGIC, SAMPLE_INTERVAL);
-    if (header.valid && header.sourceFileSize == synSize && header.sampleCount > 0) {
-      uint32_t lo = 0;
-      uint32_t hi = header.sampleCount - 1;
-      while (lo < hi) {
-        const uint32_t mid = (lo + hi + 1) / 2;
-        uint32_t offset = 0;
-        if (!readSampleOffset(sidx, mid, &offset) || !syn.seekSet(offset) ||
-            readWordInto(syn, wordBuf, sizeof(wordBuf)) < 0) {
-          lo = 0;
-          break;
-        }
-        if (StringUtils::asciiCaseCmp(wordBuf, target) <= 0) {
-          lo = mid;
-        } else {
-          hi = mid - 1;
-        }
-      }
-      readSampleOffset(sidx, lo, &startByte);
-    }
-  }
+  // Bisect the sampled offsets to the last synonym <= target, same descent
+  // locate() runs over .qidx/.idx.
+  const uint32_t startByte = bisectSamples(session.sidx, session.syn, session.synSampleCount, target);
 
   // Linear scan of at most SAMPLE_INTERVAL entries: synonym NUL, BE32 ordinal.
   // Sorted, so stop at the first synonym > target. Reading the ordinal before
   // calling locateByOrdinal() (which reuses wordBuf) avoids any aliasing.
-  if (!syn.seekSet(startByte)) {
+  if (!session.syn.seekSet(startByte)) {
+    LOG_ERR("DICT", "Synonym seek to %lu failed", static_cast<unsigned long>(startByte));
     result.readError = true;
     return result;
   }
-  while (static_cast<uint32_t>(syn.position()) < synSize) {
-    if (readWordInto(syn, wordBuf, sizeof(wordBuf)) < 0) break;
+  while (static_cast<uint32_t>(session.syn.position()) < session.synSize) {
+    if (readWordInto(session.syn, wordBuf, sizeof(wordBuf)) < 0) break;
     uint8_t ordBytes[4];
-    if (syn.read(ordBytes, 4) != 4) break;
+    if (session.syn.read(ordBytes, 4) != 4) break;
 
     const int cmp = StringUtils::asciiCaseCmp(wordBuf, target);
-    if (cmp == 0) return locateByOrdinal(readBe32(ordBytes), matchedHeadwordOut);
+    if (cmp == 0) return locateByOrdinal(session, readBe32(ordBytes), matchedHeadwordOut);
     if (cmp > 0) break;
   }
   return result;
@@ -609,8 +620,9 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
   const std::string cleaned = cleanWord(word);
   if (cleaned.empty() || !isOpen()) return false;
 
-  // One set of open handles for the exact-match probe and every stem variant,
-  // scoped so .idx/.qidx close before readDefinition() opens the data file.
+  // One set of open handles for the exact-match probe, the synonym probe and
+  // every stem variant, scoped so .idx/.qidx (and .syn/.sidx) close before
+  // readDefinition() opens the data file.
   DictLocation location;
   bool searchFailed = false;
   {
@@ -624,12 +636,14 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
 
     location = locate(session, cleaned.c_str(), &matchedHeadwordOut);
     searchFailed = location.readError;
+
     // Dictionary-authored synonyms (alternate spellings, irregular forms) take
     // precedence over the English-only stemmer, and are language-agnostic.
     if (!location.found && hasSyn) {
-      location = locateSynonym(cleaned.c_str(), &matchedHeadwordOut);
+      location = locateSynonym(session, cleaned.c_str(), &matchedHeadwordOut);
       searchFailed = searchFailed || location.readError;
     }
+
     if (!location.found) {
       std::vector<std::string> variants;
       stemVariants(cleaned, variants);
@@ -641,9 +655,9 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
     }
   }
   if (!location.found) {
-    // A search that never reached a verdict (couldn't open or seek .idx/.syn) is
-    // a read failure, not a miss — reporting "Not found" would be wrong.
-    // Otherwise the word is genuinely not in the dictionary.
+    // A search that never reached a verdict (couldn't open or seek .idx) is a
+    // read failure, not a miss — reporting "Not found" is the bug this PR exists
+    // for. Otherwise the word is genuinely not in the dictionary.
     if (searchFailed) setResult(LookupResult::ReadError);
     return false;
   }
