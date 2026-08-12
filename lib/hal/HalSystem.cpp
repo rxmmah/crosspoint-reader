@@ -101,7 +101,7 @@ void begin() {
 void checkPanic() {
   if (isRebootFromPanic()) {
     auto panicInfo = getPanicInfo(true);
-    auto file = Storage.open("/crash_report.txt", O_WRITE | O_CREAT | O_TRUNC);
+    auto file = Storage.open("/crash_report.txt", O_WRONLY | O_CREAT | O_TRUNC);
     if (file) {
       const size_t written = file.write(panicInfo.c_str(), panicInfo.size());
       file.close();

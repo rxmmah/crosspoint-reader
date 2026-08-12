@@ -67,6 +67,45 @@ inline bool utf8IsCjkCodepoint(const uint32_t cp) {
          || (cp >= 0x30000 && cp <= 0x323AF);  // CJK Extensions G-H
 }
 
+// Returns true for codepoints that punctuate rather than spell: every non-alphanumeric
+// ASCII byte plus the punctuation blocks of the scripts the reader renders. Used to trim
+// punctuation off word edges (dictionary lookup) and to reject punctuation-only tokens.
+// Script-specific marks that occur inside words (Arabic tatweel, Hebrew niqqud, modifier
+// apostrophes) are deliberately absent.
+inline bool utf8IsPunctuation(const uint32_t cp) {
+  if (cp < 0x80) {
+    return !((cp >= '0' && cp <= '9') || (cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z'));
+  }
+  return (cp >= 0x00A0 && cp <= 0x00BF)      // Latin-1 punctuation and signs
+         || cp == 0x00D7 || cp == 0x00F7     // multiplication / division sign
+         || cp == 0x037E || cp == 0x0387     // Greek question mark, ano teleia
+         || (cp >= 0x055A && cp <= 0x055F)   // Armenian punctuation
+         || (cp >= 0x0589 && cp <= 0x058A)   // Armenian full stop, hyphen
+         || cp == 0x05BE || cp == 0x05C0     // Hebrew maqaf, paseq
+         || cp == 0x05C3 || cp == 0x05C6     // Hebrew sof pasuq, nun hafukha
+         || (cp >= 0x05F3 && cp <= 0x05F4)   // Hebrew geresh, gershayim
+         || (cp >= 0x0600 && cp <= 0x060F)   // Arabic number signs, comma, semicolon
+         || cp == 0x061B || cp == 0x061E     // Arabic semicolon, triple dot
+         || cp == 0x061F || cp == 0x06D4     // Arabic question mark, full stop
+         || (cp >= 0x066A && cp <= 0x066D)   // Arabic percent, decimal separators, star
+         || (cp >= 0x0964 && cp <= 0x0965)   // Devanagari danda, double danda
+         || cp == 0x0E4F                     // Thai fongman
+         || (cp >= 0x0E5A && cp <= 0x0E5B)   // Thai angkhankhu, khomut
+         || (cp >= 0x104A && cp <= 0x104F)   // Myanmar punctuation
+         || (cp >= 0x1360 && cp <= 0x1368)   // Ethiopic punctuation
+         || (cp >= 0x1800 && cp <= 0x180A)   // Mongolian punctuation
+         || (cp >= 0x2000 && cp <= 0x206F)   // General Punctuation (curly quotes, dashes)
+         || (cp >= 0x2E00 && cp <= 0x2E7F)   // Supplemental Punctuation
+         || (cp >= 0x3000 && cp <= 0x303F)   // CJK Symbols and Punctuation
+         || cp == 0x30FB                     // Katakana middle dot
+         || (cp >= 0xFE10 && cp <= 0xFE19)   // Vertical Forms
+         || (cp >= 0xFE30 && cp <= 0xFE6F)   // CJK Compatibility / Small Form Variants
+         || (cp >= 0xFF01 && cp <= 0xFF0F)   // Fullwidth ! through /
+         || (cp >= 0xFF1A && cp <= 0xFF20)   // Fullwidth : through @
+         || (cp >= 0xFF3B && cp <= 0xFF40)   // Fullwidth [ through `
+         || (cp >= 0xFF5B && cp <= 0xFF65);  // Fullwidth { through halfwidth CJK marks
+}
+
 // Returns true for Unicode combining diacritical marks that should not advance the cursor.
 inline bool utf8IsCombiningMark(const uint32_t cp) {
   return (cp >= 0x0300 && cp <= 0x036F)      // Combining Diacritical Marks

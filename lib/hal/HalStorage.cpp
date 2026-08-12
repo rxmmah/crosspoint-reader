@@ -81,7 +81,7 @@ HalFile::~HalFile() = default;
 HalFile::HalFile(HalFile&&) = default;
 HalFile& HalFile::operator=(HalFile&&) = default;
 
-HalFile HalStorage::open(const char* path, const oflag_t oflag) {
+HalFile HalStorage::open(const char* path, const int oflag) {
   StorageLock lock;  // ensure thread safety for the duration of this function
   return HalFile(std::make_unique<HalFile::Impl>(SDCard.open(path, oflag)));
 }

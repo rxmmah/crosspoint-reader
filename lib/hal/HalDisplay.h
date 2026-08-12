@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
-#include <EInkDisplay.h>
+
+#include "../../freeink-sdk/libs/display/FreeInkDisplay/include/EInkDisplay.h"  // project-local FreeInk display shim
 
 class HalDisplay {
  public:

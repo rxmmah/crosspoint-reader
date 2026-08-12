@@ -1,7 +1,8 @@
 #pragma once
 
+#include <Arduino.h>
 #include <Print.h>
-#include <common/FsApiConstants.h>  // for oflag_t
+#include <fcntl.h>  // for O_RDONLY / open flags
 #include <freertos/semphr.h>
 
 #include <memory>
@@ -30,7 +31,8 @@ class HalStorage {
   // Ensure a directory exists, creating it if necessary. Returns true on success.
   bool ensureDirectoryExists(const char* path);
 
-  HalFile open(const char* path, const oflag_t oflag = O_RDONLY);
+  // `oflag` uses POSIX open-style flags (O_RDONLY, O_RDWR, O_CREAT, ...)
+  HalFile open(const char* path, const int oflag = O_RDONLY);
   bool mkdir(const char* path, const bool pFlag = true);
   bool exists(const char* path);
   bool remove(const char* path);

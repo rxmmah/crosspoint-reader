@@ -163,25 +163,69 @@ unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPower
 
 bool HalGPIO::hasTouch() const { return inputMgr.hasTouch(); }
 
-bool HalGPIO::wasTouchTap(float& nx, float& ny) const { return inputMgr.wasTouchTap(nx, ny); }
+bool HalGPIO::wasTouchTap(float& nx, float& ny) const {
+  if (touchContactSuppressed) {
+    // If the contact ended, clear suppression so future contacts work normally.
+    if (inputMgr.wasTouchReleased()) {
+      touchContactSuppressed = false;
+    }
+    return false;
+  }
+  return inputMgr.wasTouchTap(nx, ny);
+}
 
-bool HalGPIO::wasTouchDown(float& nx, float& ny) const { return inputMgr.wasTouchPressedAt(nx, ny); }
+bool HalGPIO::wasTouchDown(float& nx, float& ny) const {
+  if (touchContactSuppressed) return false;
+  return inputMgr.wasTouchPressedAt(nx, ny);
+}
 
-bool HalGPIO::wasTouchReleased() const { return inputMgr.wasTouchReleased(); }
+bool HalGPIO::wasTouchReleased() const {
+  if (touchContactSuppressed) {
+    if (inputMgr.wasTouchReleased()) {
+      touchContactSuppressed = false;
+      return false;
+    }
+    return false;
+  }
+  return inputMgr.wasTouchReleased();
+}
 
 bool HalGPIO::isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const {
+  if (touchContactSuppressed) {
+    if (inputMgr.wasTouchReleased()) {
+      touchContactSuppressed = false;
+    }
+    return false;
+  }
   return inputMgr.isTouchTapCandidate(nx, ny, heldMs);
 }
 
-bool HalGPIO::isTouchHeldAt(float& nx, float& ny) const { return inputMgr.isTouchHeldAt(nx, ny); }
+bool HalGPIO::isTouchHeldAt(float& nx, float& ny) const {
+  if (touchContactSuppressed) return false;
+  return inputMgr.isTouchHeldAt(nx, ny);
+}
 
-bool HalGPIO::wasTouchLongPress(float& nx, float& ny) const { return inputMgr.wasTouchLongPress(nx, ny); }
+bool HalGPIO::wasTouchLongPress(float& nx, float& ny) const {
+  if (touchContactSuppressed) return false;
+  unsigned long heldMs = 0;
+  // Use tap-candidate held time (time since touch-down). Only returns true
+  // while the finger is still down and within tap slop.
+  if (!inputMgr.isTouchTapCandidate(nx, ny, heldMs)) return false;
+  static constexpr unsigned long TOUCH_LONG_PRESS_MS = 350;  // ms
+  return heldMs >= TOUCH_LONG_PRESS_MS;
+}
 
-void HalGPIO::suppressTouchContact() { inputMgr.suppressTouchContact(); }
+void HalGPIO::suppressTouchContact() { touchContactSuppressed = true; }
 
 unsigned long HalGPIO::lastTouchHeldMs() const { return inputMgr.lastTouchHeldMs(); }
 
 bool HalGPIO::wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const {
+  if (touchContactSuppressed) {
+    if (inputMgr.wasTouchReleased()) {
+      touchContactSuppressed = false;
+    }
+    return false;
+  }
   return inputMgr.wasSwipe(nxStart, nyStart, nxEnd, nyEnd);
 }
 

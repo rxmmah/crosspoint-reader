@@ -1,7 +1,8 @@
 #pragma once
 
 #include <Arduino.h>
-#include <InputManager.h>
+
+#include "../../freeink-sdk/libs/hardware/InputManager/include/InputManager.h"
 
 // Display SPI pins (custom pins for XteinkX4, not hardware SPI defaults)
 #define EPD_SCLK 8   // SPI Clock
@@ -41,6 +42,10 @@
 class HalGPIO {
 #if CROSSPOINT_EMULATED == 0
   InputManager inputMgr;
+  // When set, HalGPIO will suppress the remainder of the current touch
+  // contact (held and release edges). Cleared automatically when the touch
+  // actually ends. Mutable so const accessors can update it.
+  mutable bool touchContactSuppressed = false;
 #endif
 
   bool lastUsbConnected = false;
