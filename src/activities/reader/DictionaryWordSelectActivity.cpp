@@ -5,6 +5,7 @@
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <Memory.h>
+#include <Utf8.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -24,19 +25,15 @@ namespace {
 
 constexpr unsigned long POPUP_DURATION_MS = 1500;
 
-// A token is selectable when it has an ASCII alphanumeric or a non-ASCII
-// codepoint outside U+2000-U+206F (dashes, bullets and other General
-// Punctuation that appear as standalone tokens are not words).
+// A token is selectable when it holds at least one non-punctuation codepoint;
+// dashes, bullets and the punctuation marks of any script that appear as
+// standalone tokens are not words.
 bool isSelectableToken(const char* text) {
-  for (const uint8_t* p = reinterpret_cast<const uint8_t*>(text); *p != 0; p++) {
-    if (*p < 0x80) {
-      if (std::isalnum(*p)) return true;
-    } else if (*p == 0xE2 && (p[1] == 0x80 || p[1] == 0x81)) {
-      if (p[2] == 0) break;  // truncated sequence: skipping would step past the NUL
-      p += 2;                // skip the 3-byte General Punctuation codepoint
-    } else {
-      return true;
-    }
+  const auto* p = reinterpret_cast<const unsigned char*>(text);
+  while (*p != 0) {
+    const uint32_t cp = utf8NextCodepoint(&p);
+    if (cp == 0) break;
+    if (!utf8IsPunctuation(cp)) return true;
   }
   return false;
 }

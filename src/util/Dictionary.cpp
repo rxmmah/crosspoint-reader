@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <cctype>
@@ -62,8 +63,6 @@ uint32_t readBe32(const uint8_t* p) {
 
 // Word characters for cleaning: ASCII alphanumerics plus any UTF-8
 // continuation/lead byte, so accented words keep their edges.
-bool isWordByte(unsigned char c) { return c >= 0x80 || std::isalnum(c) != 0; }
-
 // True when the .ifo declares 64-bit index offsets, which this reader does not
 // support (only scans the first 2KB — idxoffsetbits always appears early).
 bool ifoDeclares64BitOffsets(const std::string& ifoPath) {
@@ -554,24 +553,23 @@ std::string Dictionary::cleanWord(const char* word) {
   const auto* b = reinterpret_cast<const unsigned char*>(word);
   size_t start = 0;
   size_t end = strlen(word);
-  // Curly quotes and dashes (General Punctuation U+2000-U+206F = E2 80/81 xx)
-  // are all >= 0x80, so isWordByte keeps them; strip those 3-byte codepoints
-  // from the edges too, or EPUB text like garage.” never matches a headword.
+  // Trim whole punctuation codepoints off both edges: page text carries the
+  // sentence's punctuation on the word ("garage.”", "كلمة،", "词，"), and no
+  // headword does. Byte-wise trimming would only reach ASCII, leaving the
+  // non-ASCII marks of every other script attached.
   while (start < end) {
-    if (!isWordByte(b[start]))
-      start++;
-    else if (end - start >= 3 && b[start] == 0xE2 && (b[start + 1] == 0x80 || b[start + 1] == 0x81))
-      start += 3;
-    else
-      break;
+    const unsigned char* p = b + start;
+    const uint32_t cp = utf8NextCodepoint(&p);
+    if (cp == 0 || !utf8IsPunctuation(cp)) break;
+    start = static_cast<size_t>(p - b);
   }
   while (end > start) {
-    if (!isWordByte(b[end - 1]))
-      end--;
-    else if (end - start >= 3 && b[end - 3] == 0xE2 && (b[end - 2] == 0x80 || b[end - 2] == 0x81))
-      end -= 3;
-    else
-      break;
+    size_t last = end - 1;
+    while (last > start && (b[last] & 0xC0) == 0x80) last--;  // back up to the lead byte
+    const unsigned char* p = b + last;
+    const uint32_t cp = utf8NextCodepoint(&p);
+    if (cp == 0 || !utf8IsPunctuation(cp)) break;
+    end = last;
   }
   if (start >= end) return "";
 
