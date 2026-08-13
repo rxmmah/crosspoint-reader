@@ -104,7 +104,7 @@ void FileBrowserActivity::collectDir(const std::string& dirPath, std::vector<std
       } else {
         keep = FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
                FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
-               FsHelpers::hasBmpExtension(filename);
+               FsHelpers::hasBmpExtension(filename) || FsHelpers::hasPngExtension(filename);
       }
       if (keep) files.emplace_back(prefix + std::string(filename));
     }
