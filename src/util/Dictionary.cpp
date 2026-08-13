@@ -501,7 +501,7 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
     offset = location.offset;
   } else {
     if (!buildPath(pathBuf, sizeof(pathBuf), ".dict.dz")) return fail(LookupResult::ReadError);
-    HalFile tmp = Storage.open(DICT_TMP_FILE, O_WRITE | O_CREAT | O_TRUNC);
+    HalFile tmp = Storage.open(DICT_TMP_FILE, O_WRONLY | O_CREAT | O_TRUNC);
     if (!tmp) {
       LOG_ERR("DICT", "Failed to open %s", DICT_TMP_FILE);
       return fail(LookupResult::ReadError);

@@ -46,6 +46,12 @@ class MappedInputManager {
   bool hasTouch() const;
   bool wasScreenTapped(int& x, int& y) const;
   bool wasScreenTouchDown(int& x, int& y) const;
+  // Paged list hit-tests for screens still driving their own touch handling
+  // (the FreeInkUI list path routes taps through UiListActivity instead).
+  bool wasListItemTapped(int& index, int itemCount, int selectedIndex, int listTop, int listHeight,
+                         bool hasSubtitle) const;
+  bool wasListItemTouchedDown(int& index, int itemCount, int selectedIndex, int listTop, int listHeight,
+                              bool hasSubtitle) const;
   // One-shot long-press from the SDK touch classifier, fired WHILE the finger
   // is still down (stationary contact held past the SDK threshold). Consuming
   // it suppresses the remainder of the contact — its continued hold and its
@@ -105,6 +111,10 @@ class MappedInputManager {
   // read it here instead of CrossPointSettings.orientation, which is just the persisted reader
   // preference and stays "rotated" even while portrait UI like home/settings is on screen.
   const GfxRenderer& renderer;
+
+  // Maps a screen point to a row index within a paged list band.
+  bool listItemFromPoint(int x, int y, int& index, int itemCount, int selectedIndex, int listTop, int listHeight,
+                         bool hasSubtitle) const;
 
   Button mapScreenDirection(Button button) const;
   Labels mapFrontLabels(const char* back, const char* confirm, const char* left, const char* right) const;

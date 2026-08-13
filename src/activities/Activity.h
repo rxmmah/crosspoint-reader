@@ -68,4 +68,17 @@ class Activity {
   // TODO: remove this in near future
   void onGoHome(HomeMenuItem item = HomeMenuItem::NONE);
   void onSelectBook(const std::string& path);
+
+ protected:
+  enum class ListTouchResult : uint8_t {
+    None,      // touch did not hit the list
+    Consumed,  // touchdown moved the highlight (repaint already requested)
+    Activated  // tap landed on a row: selectedIndex is updated, caller activates it
+  };
+
+  // Shared touch handling for selectable list screens that draw their own list
+  // (GUI.drawList) rather than going through UiListActivity's FreeInkUI path:
+  // touchdown highlights the touched row, a tap selects and reports Activated.
+  // The caller supplies the list band and runs its own activate action.
+  ListTouchResult handleListTouch(int& selectedIndex, int itemCount, int listTop, int listHeight, bool hasSubtitle);
 };

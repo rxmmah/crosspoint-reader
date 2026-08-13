@@ -14,6 +14,23 @@ void Activity::onGoHome(HomeMenuItem item) { activityManager.goHome(item); }
 
 void Activity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
 
+Activity::ListTouchResult Activity::handleListTouch(int& selectedIndex, const int itemCount, const int listTop,
+                                                    const int listHeight, const bool hasSubtitle) {
+  int touched = -1;
+  if (mappedInput.wasListItemTouchedDown(touched, itemCount, selectedIndex, listTop, listHeight, hasSubtitle)) {
+    if (selectedIndex != touched) {
+      selectedIndex = touched;
+      requestUpdate();
+    }
+    return ListTouchResult::Consumed;
+  }
+  if (mappedInput.wasListItemTapped(touched, itemCount, selectedIndex, listTop, listHeight, hasSubtitle)) {
+    selectedIndex = touched;
+    return ListTouchResult::Activated;
+  }
+  return ListTouchResult::None;
+}
+
 void Activity::startActivityForResult(std::unique_ptr<Activity>&& activity, ActivityResultHandler resultHandler) {
   this->resultHandler = std::move(resultHandler);
   activityManager.pushActivity(std::move(activity));

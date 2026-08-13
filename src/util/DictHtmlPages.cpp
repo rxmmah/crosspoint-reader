@@ -197,7 +197,7 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
   }
 
   {
-    HalFile tmp = Storage.open(TMP_HTML_PATH, O_WRITE | O_CREAT | O_TRUNC);
+    HalFile tmp = Storage.open(TMP_HTML_PATH, O_WRONLY | O_CREAT | O_TRUNC);
     if (!tmp) {
       LOG_ERR("DHTML", "Cannot create %s", TMP_HTML_PATH);
       return false;

@@ -132,10 +132,12 @@ enum UIIcon {
   Image,
   Book,
   File,
+  Wifi,
   Recent,
   Settings,
   Library,
   Bookshelf,
+  Hotspot,
   Bookmark,
   BookmarkOutline
 };
