@@ -642,8 +642,6 @@ void DictionaryWordSelectActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) confirmPressSeen = true;
-
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (anchor >= 0) {
       // Cancel the in-progress selection; a full repaint clears its boxes.
@@ -660,7 +658,7 @@ void DictionaryWordSelectActivity::loop() {
     }
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && confirmPressSeen && !words.empty()) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && !words.empty()) {
     handleConfirmRelease();
     return;
   }

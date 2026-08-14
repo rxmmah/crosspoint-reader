@@ -26,15 +26,6 @@ class RecentBooksActivity final : public UiListActivity {
   const char* headerTitle() const override { return tr(STR_MENU_RECENT_BOOKS); }
   void drawFooter() override;
 
-  // Set when a long-press has fired; input is swallowed until Confirm is released
-  // again so the release doesn't also open the book.
-  bool longPressFired = false;
-
-  // True after the ConfirmationActivity pushed by promptRemoveBook closed via a physical Back
-  // press (to cancel): that press's release is still pending and must not be reinterpreted as
-  // our own Back release, which would immediately go home on top of just closing the dialog.
-  bool lockNextBackRelease = false;
-
   std::vector<RecentBook> recentBooks;
   // Row buffer, built in loadRecentBooks() (not buildScreen(), which reuses
   // it on every repaint instead of rebuilding a ListItem vector per render).

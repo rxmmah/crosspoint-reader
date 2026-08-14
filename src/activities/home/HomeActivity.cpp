@@ -236,12 +236,8 @@ void HomeActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) backPressSeen = true;
-
-  // Back is otherwise unused on the home menu, so it runs the user's configured
-  // action. backPressSeen guards against the stale release of the Back press
-  // that closed the previous activity.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && backPressSeen) {
+  // Back is otherwise unused on the home menu, so it runs the user's configured action.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     switch (SETTINGS.homeBackAction) {
       case CrossPointSettings::HOME_BACK_RESUME:
         // recentBooks is most-recent-first and already pruned of files missing
