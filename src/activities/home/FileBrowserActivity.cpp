@@ -155,9 +155,13 @@ void FileBrowserActivity::loadFiles() {
 // Rescans from disk: the flat walk only runs while the flat view is on, so
 // there is no second listing sitting in RAM.
 void FileBrowserActivity::toggleFlatView() {
-  flatView = !flatView;
-  loadFiles();
-  selectorIndex = 0;
+  {
+    // render() runs on the render task and reads basepath and files; mutate only under the lock.
+    RenderLock lock(*this);
+    flatView = !flatView;
+    loadFiles();
+    selectorIndex = 0;
+  }
   requestUpdate();
 }
 
@@ -335,12 +339,16 @@ void FileBrowserActivity::promptDelete(const std::string& entry, const std::stri
       LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
       if (removeDirFile(fullPath)) {
         LOG_DBG("FileBrowser", "Deleted successfully");
-        loadFiles();
-        if (files.empty()) {
-          selectorIndex = 0;
-        } else if (selectorIndex >= files.size()) {
-          // Move selection to the new "last" item
-          selectorIndex = files.size() - 1;
+        {
+          // render() reads files on the render task; see loop().
+          RenderLock lock(*this);
+          loadFiles();
+          if (files.empty()) {
+            selectorIndex = 0;
+          } else if (selectorIndex >= files.size()) {
+            // Move selection to the new "last" item
+            selectorIndex = files.size() - 1;
+          }
         }
 
         requestUpdate(true);
@@ -409,6 +417,8 @@ void FileBrowserActivity::promptMoveDestination(const std::string& srcPath, cons
                            const bool moved = isDirectory ? moveFolderWithProgress(srcPath, dstPath)
                                                           : BookMover::moveFile(srcPath, dstPath);
                            if (moved) {
+                             // render() reads files on the render task; see loop().
+                             RenderLock lock(*this);
                              loadFiles();
                              if (files.empty()) {
                                selectorIndex = 0;
@@ -442,6 +452,8 @@ void FileBrowserActivity::promptRenameFolder(const std::string& srcPath) {
         if (Storage.exists(dstPath.c_str()) || !moveFolderWithProgress(srcPath, dstPath)) {
           showMessage(StrId::STR_RENAME_FAILED);
         } else {
+          // render() reads files on the render task; see loop().
+          RenderLock lock(*this);
           loadFiles();
           selectorIndex = findEntry(name + "/");
         }
@@ -478,10 +490,13 @@ void FileBrowserActivity::promptNewFolder() {
           showMessage(StrId::STR_FOLDER_CREATE_FAILED);
         } else if (mode == Mode::PickFolder) {
           // Jump straight into the new folder so "Move here" drops the book in it.
+          // render() reads basepath and files on the render task; see loop().
+          RenderLock lock(*this);
           basepath = std::move(dirPath);
           loadFiles();
           selectorIndex = 0;
         } else {
+          RenderLock lock(*this);
           loadFiles();
           selectorIndex = findEntry(name + "/");
         }
@@ -516,9 +531,13 @@ void FileBrowserActivity::loop() {
   // In firmware-pick mode we keep navigation simple: short Back = up dir / cancel.
   if (mode == Mode::Books && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() >= GO_HOME_MS && basepath != "/") {
-    basepath = "/";
-    loadFiles();
-    selectorIndex = 0;
+    {
+      // render() runs on the render task and reads basepath and files; mutate only under the lock.
+      RenderLock lock(*this);
+      basepath = "/";
+      loadFiles();
+      selectorIndex = 0;
+    }
     requestUpdate();
     return;
   }
@@ -553,10 +572,14 @@ void FileBrowserActivity::loop() {
       const bool onDirectory = selectorIndex >= 2 && files[selectorIndex - 2].back() == '/';
       if (onDirectory) {
         const std::string dirEntry = files[selectorIndex - 2];
-        if (basepath.back() != '/') basepath += "/";
-        basepath += dirEntry.substr(0, dirEntry.length() - 1);
-        loadFiles();
-        selectorIndex = 0;
+        {
+          // render() runs on the render task and reads basepath and files; mutate only under the lock.
+          RenderLock lock(*this);
+          if (basepath.back() != '/') basepath += "/";
+          basepath += dirEntry.substr(0, dirEntry.length() - 1);
+          loadFiles();
+          selectorIndex = 0;
+        }
         requestUpdate();
         return;
       }
@@ -590,15 +613,21 @@ void FileBrowserActivity::loop() {
       return;
     } else {
       // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---
+      // render() runs on the render task and reads basepath and files (entry points into files);
+      // mutate only under the render lock.
+      RenderLock lock(*this);
       if (basepath.back() != '/') basepath += "/";
 
       if (isDirectory) {
         basepath += entry.substr(0, entry.length() - 1);
         loadFiles();
         selectorIndex = 0;
+        lock.unlock();
         requestUpdate();
       } else {
-        onSelectBook(basepath + entry);
+        const std::string fullPath = basepath + entry;
+        lock.unlock();  // onSelectBook launches an activity; don't hold the lock across it
+        onSelectBook(fullPath);
       }
     }
     return;
@@ -623,14 +652,18 @@ void FileBrowserActivity::loop() {
       if (basepath != "/") {
         const std::string oldPath = basepath;
 
-        basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
-        if (basepath.empty()) basepath = "/";
-        loadFiles();
+        {
+          // render() runs on the render task and reads basepath and files; mutate only under the lock.
+          RenderLock lock(*this);
+          basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
+          if (basepath.empty()) basepath = "/";
+          loadFiles();
 
-        const auto pos = oldPath.find_last_of('/');
-        const std::string dirName = oldPath.substr(pos + 1) + "/";
-        selectorIndex = findEntry(dirName) + syntheticCount();
-        if (selectorIndex >= files.size() + syntheticCount()) selectorIndex = 0;
+          const auto pos = oldPath.find_last_of('/');
+          const std::string dirName = oldPath.substr(pos + 1) + "/";
+          selectorIndex = findEntry(dirName) + syntheticCount();
+          if (selectorIndex >= files.size() + syntheticCount()) selectorIndex = 0;
+        }
 
         requestUpdate();
       } else if (mode != Mode::Books) {
