@@ -30,9 +30,20 @@ class EpubReaderMenuActivity final : public UiListActivity {
     DICTIONARY
   };
 
+  // Rows that only some formats can service. EPUB supports all of them and
+  // takes the defaults; simpler formats hide what they cannot honour rather
+  // than offering a row that does nothing.
+  struct Features {
+    bool chapters = true;    // SELECT_CHAPTER, and the "Chapter x/y" progress line
+    bool bookmarks = true;   // TOGGLE_BOOKMARK (BOOKMARKS also needs hasBookmarks)
+    bool dictionary = true;  // DICTIONARY word lookup
+    bool sync = true;        // SYNC to KOReader
+  };
+
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks);
+                                  const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks,
+                                  Features features);
 
   void render(RenderLock&&) override;
   bool handleHomeGesture() override;
@@ -43,7 +54,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
     StrId labelId;
   };
 
-  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks);
+  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks, Features features);
 
   // Row storage: menuItems is at most MAX_MENU_ITEMS, so a
   // fixed-capacity array avoids any heap allocation for the row list. Labels
@@ -67,6 +78,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
   void closeCancelled();
 
   // Fixed menu layout
+  const Features features;
   const std::vector<MenuItem> menuItems;
 
   OptionPopup optionPopup;

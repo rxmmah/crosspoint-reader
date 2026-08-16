@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
+#include "EpubReaderMenuActivity.h"
 #include "ReaderActivity.h"
 
 // Renders .md files with markdown styling: headings, emphasis, lists, quotes,
@@ -58,6 +59,17 @@ class MarkdownReaderActivity final : public ReaderActivity {
   int viewportHeight = 0;
   int lineHeight = 0;
   bool initialized = false;
+  bool pendingScreenshot = false;
+  // Set by invalidateLayout(): after the index is rebuilt, resume on the page
+  // covering this byte offset instead of the page number saved on disk.
+  bool hasPendingRestore = false;
+  uint32_t pendingRestoreOffset = 0;
+
+  // Automatic page turning, driven from loop() while the reader menu's
+  // pages-per-minute option is set.
+  bool automaticPageTurnActive = false;
+  unsigned long pageTurnDuration = 0;
+  unsigned long lastPageTurnTime = 0;
 
   // Cached settings for page-index cache validation
   int cachedFontId = 0;
@@ -91,6 +103,20 @@ class MarkdownReaderActivity final : public ReaderActivity {
   void saveProgress() const;
   void loadProgress();
 
+  void openReaderMenu();
+  void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
+  void applyOrientation(uint8_t orientation);
+  void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
+  // Drops the page index so the next render re-paginates, resuming on whichever
+  // new page covers the current reading offset. Used after anything that
+  // changes layout: font, size, margins, orientation.
+  void invalidateLayout();
+  int bookProgressPercent() const;
+  // Byte offset of the page currently on screen, for restoring position across
+  // a re-pagination.
+  uint32_t currentOffset() const;
+
+  bool handleFormatInput() override;
   bool loadBook() override;
   std::string getBookTitle() const override { return doc ? doc->getTitle() : ""; }
   void renderBook() override;
@@ -101,6 +127,7 @@ class MarkdownReaderActivity final : public ReaderActivity {
       : ReaderActivity("MarkdownReader", renderer, mappedInput, std::move(bookPath), allowFastInitialRefresh) {}
   ~MarkdownReaderActivity() override = default;
 
+  void loop() override;
   bool pageTurn(bool isForward) override;
   bool skipPages(int amount) override;
   bool isAtEndOfBook() const override;

@@ -11,15 +11,23 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "EpubReaderPercentSelectionActivity.h"
 #include "ProgressFile.h"
+#include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
+#include "SdCardFontSystem.h"
+#include "activities/settings/TextSettingsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/ScreenshotUtil.h"
 
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;
 constexpr uint32_t CACHE_MAGIC = 0x4D444B49;  // "MDKI"
 constexpr uint8_t CACHE_VERSION = 1;
+
+// Pages per minute for the reader menu's auto-turn option; index 0 is "off".
+constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
 
 // markdown::parseInline() emits EpdFontFamily style bits directly.
 static_assert(markdown::STYLE_BOLD == EpdFontFamily::BOLD, "markdown bold bit must match EpdFontFamily");
@@ -94,7 +102,19 @@ void MarkdownReaderActivity::initializeReader(GfxRenderer& renderer) {
     savePageIndexCache();
   }
 
-  loadProgress();
+  if (hasPendingRestore) {
+    // Re-paginated under new settings: page numbers no longer mean the same
+    // thing, so land on whichever page now covers the offset we were reading.
+    hasPendingRestore = false;
+    currentPage = 0;
+    for (size_t i = 0; i < pageAnchors.size(); i++) {
+      if (pageAnchors[i].offset > pendingRestoreOffset) break;
+      currentPage = static_cast<int>(i);
+    }
+    saveProgress();
+  } else {
+    loadProgress();
+  }
   initialized = true;
 }
 
@@ -471,6 +491,11 @@ void MarkdownReaderActivity::renderBook() {
   renderer.clearScreen();
   renderPage(renderer);
 
+  if (pendingScreenshot) {
+    pendingScreenshot = false;
+    ScreenshotUtil::takeScreenshot(renderer);
+  }
+
   saveProgress();
 }
 
@@ -634,6 +659,173 @@ void MarkdownReaderActivity::savePageIndexCache() const {
   }
 
   LOG_DBG("MDR", "Saved page index cache: %d pages", totalPages);
+}
+
+uint32_t MarkdownReaderActivity::currentOffset() const {
+  if (pageAnchors.empty()) return 0;
+  const int page = std::clamp(currentPage, 0, static_cast<int>(pageAnchors.size()) - 1);
+  return pageAnchors[page].offset;
+}
+
+int MarkdownReaderActivity::bookProgressPercent() const {
+  if (totalPages <= 0) return 0;
+  const int percent = static_cast<int>((currentPage + 1) * 100.0f / totalPages + 0.5f);
+  return std::clamp(percent, 0, 100);
+}
+
+void MarkdownReaderActivity::invalidateLayout() {
+  {
+    RenderLock lock(*this);
+    pendingRestoreOffset = currentOffset();
+    hasPendingRestore = true;
+    // Dropping the index forces initializeReader() to re-measure the viewport
+    // and re-paginate; the on-disk cache is rejected by its own font/margin
+    // checks, so nothing stale survives.
+    initialized = false;
+    pageAnchors.clear();
+    currentPageLines.clear();
+    totalPages = 1;
+  }
+  requestUpdate();
+}
+
+void MarkdownReaderActivity::applyOrientation(const uint8_t orientation) {
+  if (SETTINGS.orientation == orientation) return;
+  SETTINGS.orientation = orientation;
+  SETTINGS.saveToFile();
+  ReaderUtils::applyOrientation(renderer, orientation);
+  invalidateLayout();
+}
+
+void MarkdownReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
+  if (selectedPageTurnOption == 0 || selectedPageTurnOption >= std::size(PAGE_TURN_RATES)) {
+    automaticPageTurnActive = false;
+    return;
+  }
+  lastPageTurnTime = millis();
+  pageTurnDuration = (1UL * 60 * 1000) / PAGE_TURN_RATES[selectedPageTurnOption];
+  automaticPageTurnActive = true;
+}
+
+void MarkdownReaderActivity::openReaderMenu() {
+  // No chapters, bookmarks, word lookup or KOReader sync for markdown: those
+  // rows are hidden rather than shown inert.
+  constexpr EpubReaderMenuActivity::Features features{/*chapters=*/false, /*bookmarks=*/false, /*dictionary=*/false,
+                                                      /*sync=*/false};
+  startActivityForResult(
+      std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, doc ? doc->getTitle() : "", currentPage + 1,
+                                               totalPages, bookProgressPercent(), SETTINGS.orientation,
+                                               /*hasFootnotes=*/false, /*hasBookmarks=*/false, features),
+      [this](const ActivityResult& result) {
+        const auto& menu = std::get<MenuResult>(result.data);
+        if (SETTINGS.orientation != menu.orientation) {
+          applyOrientation(menu.orientation);
+        }
+        toggleAutoPageTurn(menu.pageTurnOption);
+        if (!result.isCancelled) {
+          onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+        }
+      });
+}
+
+void MarkdownReaderActivity::onReaderMenuConfirm(const EpubReaderMenuActivity::MenuAction action) {
+  switch (action) {
+    case EpubReaderMenuActivity::MenuAction::TEXT_SETTINGS:
+      startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
+                                                                    TextSettingsActivity::Tab::Family),
+                             [this](const ActivityResult&) {
+                               // TextSettingsActivity saves each change itself; font, size,
+                               // spacing and margin all change pagination.
+                               invalidateLayout();
+                             });
+      break;
+
+    case EpubReaderMenuActivity::MenuAction::GO_TO_PERCENT:
+      startActivityForResult(
+          std::make_unique<EpubReaderPercentSelectionActivity>(renderer, mappedInput, bookProgressPercent()),
+          [this](const ActivityResult& result) {
+            if (result.isCancelled) return;
+            const int percent = std::clamp(std::get<PercentResult>(result.data).percent, 0, 100);
+            const int page = totalPages > 0 ? (percent * totalPages) / 100 : 0;
+            currentPage = std::clamp(page, 0, totalPages > 0 ? totalPages - 1 : 0);
+            requestUpdate();
+          });
+      break;
+
+    case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {
+      // The QR carries the page's plain text, emphasis markers already resolved.
+      // currentPageLines belongs to the render task; copy it out under the lock.
+      std::string pageText;
+      {
+        RenderLock lock(*this);
+        for (const DisplayLine& line : currentPageLines) {
+          for (const markdown::Run& run : line.runs) pageText += run.text;
+          pageText += '\n';
+        }
+      }
+      if (!pageText.empty()) {
+        startActivityForResult(std::make_unique<QrDisplayActivity>(renderer, mappedInput, pageText),
+                               [](const ActivityResult&) {});
+        break;
+      }
+      requestUpdate();
+      break;
+    }
+
+    case EpubReaderMenuActivity::MenuAction::SCREENSHOT:
+      pendingScreenshot = true;
+      requestUpdate();
+      break;
+
+    case EpubReaderMenuActivity::MenuAction::DELETE_CACHE: {
+      {
+        RenderLock lock(*this);
+        if (doc) {
+          doc->clearCache();
+          doc->setupCacheDir();
+        }
+      }
+      // clearCache() takes progress.bin along with the index; the settings are
+      // unchanged, so the rebuilt index keeps the same page numbering.
+      saveProgress();
+      onGoHome();
+      return;
+    }
+
+    case EpubReaderMenuActivity::MenuAction::GO_HOME:
+      onGoHome();
+      return;
+
+    // Applied by the menu before it closed (night mode, frontlight), handled
+    // via the MenuResult fields (orientation, auto page turn), or hidden for
+    // this format entirely.
+    default:
+      break;
+  }
+}
+
+bool MarkdownReaderActivity::handleFormatInput() {
+  // At the end of the book Confirm belongs to the end-of-book options screen.
+  if (!doc || isAtEndOfBook()) return false;
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
+      ReaderUtils::isTouchMenuGesture(renderer, mappedInput)) {
+    openReaderMenu();
+    return true;
+  }
+  return false;
+}
+
+void MarkdownReaderActivity::loop() {
+  if (automaticPageTurnActive && initialized && millis() - lastPageTurnTime >= pageTurnDuration) {
+    lastPageTurnTime = millis();
+    if (pageTurn(true)) {
+      requestUpdate();
+    } else {
+      automaticPageTurnActive = false;
+    }
+  }
+  ReaderActivity::loop();
 }
 
 ScreenshotInfo MarkdownReaderActivity::getScreenshotInfo() const {
