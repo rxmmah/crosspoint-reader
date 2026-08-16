@@ -592,6 +592,9 @@ void FileBrowserActivity::loop() {
     }
 
     if (files.empty()) return;
+    // A touch activation can carry a row index captured before a delete/reload
+    // shrank the list; the next render re-registers the rows.
+    if (selectorIndex >= files.size()) return;
 
     const std::string& entry = files[selectorIndex];
     bool isDirectory = (entry.back() == '/');
@@ -904,7 +907,8 @@ void FileBrowserActivity::render(RenderLock&&) {
   const char* backLabel = (basepath == "/") ? (mode == Mode::Books ? tr(STR_HOME) : tr(STR_BACK)) : tr(STR_BACK);
   // In picker modes, Confirm on a selectable row returns to the caller (not "open"); show
   // STR_SELECT instead. Directories in the pickers still descend, so keep STR_OPEN there.
-  const bool selectingFirmwareFile = mode == Mode::PickFirmware && !files.empty() && files[selectorIndex].back() != '/';
+  const bool selectingFirmwareFile = mode == Mode::PickFirmware && !files.empty() && selectorIndex < files.size() &&
+                                     files[selectorIndex].back() != '/';
   const bool syntheticSelected = selectorIndex < syntheticCount();
   // In the folder picker, Confirm over a file drops the moved book here.
   const bool moveHereOnFile = mode == Mode::PickFolder && !syntheticSelected && listCount > 0 &&
