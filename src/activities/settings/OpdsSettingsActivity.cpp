@@ -152,7 +152,7 @@ void OpdsSettingsActivity::handleSelection() {
       }
     };
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
-                                                                   editServer.password, 63, InputType::Password),
+                                                                   editServer.password, 63, InputType::Text),
                            handler);
   } else if (nav.selected == FOLDER_ITEM) {
     // Per-server download folder. Left empty it defers to the global default,
