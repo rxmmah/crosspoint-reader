@@ -97,8 +97,10 @@ class ActivityManager {
   void goToCrashReport();
   // The home selector lands on initialMenuItem, or on the recent book at
   // initialRecentIndex when that is >= 0 (which takes precedence, since a recent
-  // book cover is not a HomeMenuItem).
-  void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE, int initialRecentIndex = -1);
+  // book cover is not a HomeMenuItem). cleanInitialRefresh forces a half refresh
+  // on the first render, to clear a lingering sleep image after wake.
+  void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE, int initialRecentIndex = -1,
+              bool cleanInitialRefresh = false);
 
   // This will move current activity to stack instead of deleting it
   void pushActivity(std::unique_ptr<Activity>&& activity);

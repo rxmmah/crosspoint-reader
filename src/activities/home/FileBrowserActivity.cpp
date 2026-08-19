@@ -150,6 +150,22 @@ void FileBrowserActivity::loadFiles() {
     LOG_ERR("FileBrowser", "Flat listing capped at %u entries", (unsigned)MAX_FLAT_ENTRIES);
     showMessage(StrId::STR_BROWSER_FLAT_TRUNCATED);
   }
+
+  // One SD pass for every CJK filename in the folder; repaints then hit the
+  // resident tables instead of re-reading per-string. Getter form: no
+  // concatenated copy (a bare-new string append aborts under heap pressure).
+  // Prewarms the raw entries rather than the drawn labels: getFileName() only
+  // strips ASCII decoration, so the CJK glyphs it needs are the same set.
+  renderer.prewarmFallbackText(
+      UI_10_FONT_ID,
+      [](const void* ctx, uint32_t i) -> const char* {
+        const auto* names = static_cast<const std::vector<std::string>*>(ctx);
+        return i < names->size() ? (*names)[i].c_str() : nullptr;
+      },
+      &files, static_cast<uint32_t>(files.size()));
+  // The bottom path band draws basepath in its own font, so it needs a
+  // separate batch from the rows above.
+  renderer.prewarmFallbackText(SMALL_FONT_ID, basepath.c_str());
 }
 
 // Rescans from disk: the flat walk only runs while the flat view is on, so

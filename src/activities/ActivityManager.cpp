@@ -259,7 +259,7 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
   replaceActivity(std::make_unique<FullScreenMessageActivity>(renderer, mappedInput, std::move(message), style));
 }
 
-void ActivityManager::goHome(HomeMenuItem initialMenuItem, int initialRecentIndex) {
+void ActivityManager::goHome(HomeMenuItem initialMenuItem, int initialRecentIndex, bool cleanInitialRefresh) {
   // A caller-supplied recent book index is already an explicit selector target,
   // so don't override it by guessing from the activity we're leaving.
   if (initialMenuItem == HomeMenuItem::NONE && initialRecentIndex < 0 && currentActivity) {
@@ -278,7 +278,8 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, int initialRecentInde
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
   }
-  replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem));
+  replaceActivity(
+      std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem, initialRecentIndex, cleanInitialRefresh));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
 

@@ -33,6 +33,7 @@ class HomeActivity final : public Activity {
   // Recent book cover to select on entry, or -1 for none. Takes precedence over
   // initialMenuItem: a cover is not a HomeMenuItem, so it needs its own index.
   const int initialRecentIndex;
+  const bool cleanInitialRefresh;
 
   // Convert HomeMenuItem to menu index (used in onEnter)
   static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl, bool hasKoofr) {
@@ -81,10 +82,12 @@ class HomeActivity final : public Activity {
 
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                        HomeMenuItem initialMenuItemValue = HomeMenuItem::NONE, int initialRecentIndexValue = -1)
+                        HomeMenuItem initialMenuItemValue = HomeMenuItem::NONE, int initialRecentIndexValue = -1,
+                        bool cleanInitialRefreshValue = false)
       : Activity("Home", renderer, mappedInput),
         initialMenuItem(initialMenuItemValue),
-        initialRecentIndex(initialRecentIndexValue) {}
+        initialRecentIndex(initialRecentIndexValue),
+        cleanInitialRefresh(cleanInitialRefreshValue) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
