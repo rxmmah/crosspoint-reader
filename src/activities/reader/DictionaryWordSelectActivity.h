@@ -51,9 +51,6 @@ class DictionaryWordSelectActivity final : public Activity {
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
-  // Redraws the reader's page (word boxes over it), so it follows the reading
-  // surface's night-mode polarity; a normal-polarity flash mid-lookup jars.
-  bool appliesNightMode() const override { return true; }
 
   // Power drives the dictionary lookup here, so swallow the global
   // short-Power screen refresh (SHORT_PWRBTN::FORCE_REFRESH) rather than
