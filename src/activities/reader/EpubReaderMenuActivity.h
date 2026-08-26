@@ -40,6 +40,15 @@ class EpubReaderMenuActivity final : public UiListActivity {
     bool sync = true;        // SYNC to KOReader
   };
 
+  struct MenuItem {
+    MenuAction action;
+    StrId labelId;
+  };
+
+  // Also used by the toolbar reader menu to build its "More" panel, so the two
+  // menu styles always offer the same rows.
+  static void buildMenuItems(std::vector<MenuItem>& items, bool hasFootnotes, bool hasBookmarks, Features features);
+
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
                                   const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks,
@@ -49,13 +58,6 @@ class EpubReaderMenuActivity final : public UiListActivity {
   bool handleHomeGesture() override;
 
  private:
-  struct MenuItem {
-    MenuAction action;
-    StrId labelId;
-  };
-
-  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks, Features features);
-
   // Row storage: menuItems is at most MAX_MENU_ITEMS, so a
   // fixed-capacity array avoids any heap allocation for the row list. Labels
   // are set once in the constructor (buildMenuRowItems()); buildScreen()
@@ -79,7 +81,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
 
   // Fixed menu layout
   const Features features;
-  const std::vector<MenuItem> menuItems;
+  std::vector<MenuItem> menuItems;
 
   OptionPopup optionPopup;
   std::string title = "Reader Menu";

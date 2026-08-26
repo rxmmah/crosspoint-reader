@@ -18,12 +18,12 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
                                                const Features features)
     : UiListActivity("EpubReaderMenu", renderer, mappedInput),
       features(features),
-      menuItems(buildMenuItems(hasFootnotes, hasBookmarks, features)),
       title(title),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {
+  buildMenuItems(menuItems, hasFootnotes, hasBookmarks, features);
   buildMenuRowItems();
 }
 
@@ -39,10 +39,9 @@ void EpubReaderMenuActivity::buildMenuRowItems() {
   }
 }
 
-std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes,
-                                                                                     bool hasBookmarks,
-                                                                                     const Features features) {
-  std::vector<MenuItem> items;
+void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, bool hasFootnotes, bool hasBookmarks,
+                                            const Features features) {
+  items.clear();
   items.reserve(MAX_MENU_ITEMS);
   if (features.chapters) {
     items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
@@ -74,7 +73,6 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
     items.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
   }
   items.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
-  return items;
 }
 
 void EpubReaderMenuActivity::closeCancelled() {
