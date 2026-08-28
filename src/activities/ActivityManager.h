@@ -81,6 +81,7 @@ class ActivityManager {
   void replaceActivity(std::unique_ptr<Activity>&& newActivity);
 
   // goTo... functions are convenient wrapper for replaceActivity()
+  void goToUsbDrive();
   void goToSettings();
   void goToFileBrowser(std::string path = {});
   void goToLibrary();
@@ -110,6 +111,7 @@ class ActivityManager {
   void popActivity();
 
   bool preventAutoSleep() const;
+  bool requiresExclusiveStorageLoop() const;
   bool isReaderActivity() const;
   bool handleForcedRefresh();
   bool skipLoopDelay() const;

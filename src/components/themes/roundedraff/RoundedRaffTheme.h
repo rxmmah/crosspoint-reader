@@ -74,16 +74,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .popupProgressOutlineInverted = false,
                                  .optionPopupItemSpacing = 6,
                                  .optionPopupInnerPadding = 24,
-                                 .optionPopupSelectionHPadding = 20,
                                  .optionPopupSelectionVPadding = 10,
-                                 .optionPopupTitleGap = 16,
-                                 .optionPopupUseSmallFont = false,
-                                 .optionPopupOptionFontBold = true,
-                                 .optionPopupSelectionRadius = 30,
-                                 .optionPopupSelectionLight = false,
-                                 .optionPopupDrawAllRows = true,
                                  .optionPopupDialogSideMargin = 20,
-                                 .optionPopupTitleSeparator = true,
                                  .textFieldHorizontalPadding = 8,
                                  .textFieldNormalThickness = 2,
                                  .textFieldCursorThickness = 3,
@@ -97,10 +89,6 @@ class RoundedRaffTheme : public BaseTheme {
  public:
   void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
                   const char* subtitle = nullptr) const override;
-  void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
-                  bool selected) const override;
-  bool tabIndexFromPoint(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, int x, int y,
-                         int& index) const override;
   void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                            int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
                            std::function<bool()> storeCoverBuffer) const override;

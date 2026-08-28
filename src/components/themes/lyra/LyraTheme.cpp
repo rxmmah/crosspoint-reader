@@ -40,8 +40,8 @@ constexpr int listIconSize = 24;
 constexpr int mainMenuColumns = 2;
 int coverWidth = 0;
 
-const uint8_t* iconForName(UIIcon icon, int size) {
-  if (size == 24) {
+const uint8_t* iconForName(UIIcon icon, int size = mainMenuIconSize) {
+  if (size == listIconSize) {
     switch (icon) {
       case UIIcon::Folder:
         return Folder24Icon;
@@ -56,29 +56,27 @@ const uint8_t* iconForName(UIIcon icon, int size) {
       default:
         return nullptr;
     }
-  } else if (size == 32) {
-    switch (icon) {
-      case UIIcon::Folder:
-        return FolderIcon;
-      case UIIcon::Book:
-        return BookIcon;
-      case UIIcon::Recent:
-        return RecentIcon;
-      case UIIcon::Settings:
-        return Settings2Icon;
-      case UIIcon::Library:
-        return LibraryIcon;
-      case UIIcon::Bookshelf:
-        return BookshelfIcon;
-      case UIIcon::Bookmark:
-        return BookmarkIcon;
-      case UIIcon::BookmarkOutline:
-        return BookmarkOutlineIcon;
-      default:
-        return nullptr;
-    }
   }
-  return nullptr;
+  switch (icon) {
+    case UIIcon::Folder:
+      return FolderIcon;
+    case UIIcon::Book:
+      return BookIcon;
+    case UIIcon::Recent:
+      return RecentIcon;
+    case UIIcon::Settings:
+      return Settings2Icon;
+    case UIIcon::Library:
+      return LibraryIcon;
+    case UIIcon::Bookshelf:
+      return BookshelfIcon;
+    case UIIcon::Bookmark:
+      return BookmarkIcon;
+    case UIIcon::BookmarkOutline:
+      return BookmarkOutlineIcon;
+    default:
+      return nullptr;
+  }
 }
 }  // namespace
 
@@ -119,60 +117,6 @@ void LyraTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char
   renderer.drawText(UI_10_FONT_ID, currentX, rect.y + 6, truncatedLabel.c_str(), true, EpdFontFamily::REGULAR);
 
   renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1, true);
-}
-
-void LyraTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
-                           bool selected) const {
-  int currentX = rect.x + LyraMetrics::values.contentSidePadding;
-
-  if (selected) {
-    renderer.fillRectDither(rect.x, rect.y, rect.width, rect.height, Color::LightGray);
-  }
-
-  for (const auto& tab : tabs) {
-    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, tab.label, EpdFontFamily::REGULAR);
-
-    if (tab.selected) {
-      if (selected) {
-        renderer.fillRoundedRect(currentX, rect.y + 1, textWidth + 2 * hPaddingInSelection, rect.height - 4,
-                                 cornerRadius, Color::Black);
-      } else {
-        renderer.fillRectDither(currentX, rect.y, textWidth + 2 * hPaddingInSelection, rect.height - 3,
-                                Color::LightGray);
-        renderer.drawLine(currentX, rect.y + rect.height - 3, currentX + textWidth + 2 * hPaddingInSelection,
-                          rect.y + rect.height - 3, 2, true);
-      }
-    }
-
-    renderer.drawText(UI_10_FONT_ID, currentX + hPaddingInSelection, rect.y + 6, tab.label, !(tab.selected && selected),
-                      EpdFontFamily::REGULAR);
-
-    currentX += textWidth + LyraMetrics::values.tabSpacing + 2 * hPaddingInSelection;
-  }
-
-  renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1, true);
-}
-
-bool LyraTheme::tabIndexFromPoint(const GfxRenderer& renderer, const Rect rect, const std::vector<TabInfo>& tabs,
-                                  const int x, const int y, int& index) const {
-  if (tabs.empty() || y < rect.y || y >= rect.y + rect.height) {
-    return false;
-  }
-
-  int currentX = rect.x + LyraMetrics::values.contentSidePadding;
-  for (size_t i = 0; i < tabs.size(); i++) {
-    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, tabs[i].label, EpdFontFamily::REGULAR);
-    const int tabWidth = textWidth + 2 * hPaddingInSelection;
-    const int left = (i == 0) ? rect.x : currentX - LyraMetrics::values.tabSpacing / 2;
-    const int right = currentX + tabWidth + LyraMetrics::values.tabSpacing / 2;
-    if (x >= left && x < right) {
-      index = static_cast<int>(i);
-      return true;
-    }
-    currentX += tabWidth + LyraMetrics::values.tabSpacing;
-  }
-
-  return false;
 }
 
 int LyraTheme::getListRowStep(bool hasSubtitle) const {
@@ -292,7 +236,6 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     }
   }
 }
-
 void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
   if (gpio.hasTouch()) {
@@ -516,7 +459,7 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 
     if (rowIcon != nullptr) {
       UIIcon icon = rowIcon(i);
-      const uint8_t* iconBitmap = iconForName(icon, mainMenuIconSize);
+      const uint8_t* iconBitmap = iconForName(icon);
       if (iconBitmap != nullptr) {
         renderer.drawIcon(iconBitmap, textX, textY, mainMenuIconSize);
         textX += mainMenuIconSize + hPaddingInSelection + 2;
