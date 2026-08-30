@@ -6,37 +6,26 @@
 #include <algorithm>
 #include <cstring>
 
+#include "LibraryText.h"
+
 namespace library {
 
 LibraryIndexFile::~LibraryIndexFile() { close(); }
 
 bool LibraryIndexFile::open(const char* path) {
   close();
-  file = new (std::nothrow) HalFile();
-  if (file == nullptr) {
-    LOG_ERR("LIBIDX", "HalFile alloc failed");
-    return false;
-  }
-  if (!Storage.openFileForRead("LIBIDX", path, *file)) {
-    delete file;
-    file = nullptr;
-    return false;
-  }
+  if (!Storage.openFileForRead("LIBIDX", path, file)) return false;
 
-  if (file->read(&head, sizeof(head)) != static_cast<int>(sizeof(head))) {
+  if (file.read(&head, sizeof(head)) != static_cast<int>(sizeof(head))) {
     lastValidity = ClixValidity::SizeMismatch;
-    file->close();
-    delete file;
-    file = nullptr;
+    file.close();
     return false;
   }
 
-  lastValidity = validateHeader(head, file->fileSize64());
+  lastValidity = validateHeader(head, file.fileSize64());
   if (lastValidity != ClixValidity::Ok) {
     LOG_INF("LIBIDX", "index rejected: %s", clixValidityName(lastValidity));
-    file->close();
-    delete file;
-    file = nullptr;
+    file.close();
     return false;
   }
   opened = true;
@@ -44,21 +33,17 @@ bool LibraryIndexFile::open(const char* path) {
 }
 
 void LibraryIndexFile::close() {
-  if (file != nullptr) {
-    file->close();
-    delete file;
-    file = nullptr;
-  }
+  file.close();
   opened = false;
 }
 
 bool LibraryIndexFile::readAt(const uint32_t offset, void* dst, const size_t len) {
-  if (!opened || file == nullptr) return false;
+  if (!opened) return false;
   // Every offset handed to this function comes from the header, and the header
   // was validated against the real file size, so a short read means the card
   // changed under us rather than a bad computation.
-  if (!file->seekSet(offset)) return false;
-  return file->read(dst, len) == static_cast<int>(len);
+  if (!file.seekSet(offset)) return false;
+  return file.read(dst, len) == static_cast<int>(len);
 }
 
 uint16_t LibraryIndexFile::ordinalForRow(const SortOrder order, const uint16_t row) {
@@ -169,7 +154,7 @@ bool LibraryIndexFile::readPath(const ClixRecord& record, std::string& out) {
       if (!readAt(offset + 1, dir.data(), pathLen)) return false;
       std::string name;
       if (!readName(record, name)) return false;
-      out = dir + "/" + name;
+      out = joinLibraryPath(dir, name);
       return true;
     }
     offset += 1u + pathLen;

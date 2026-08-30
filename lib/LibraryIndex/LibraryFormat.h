@@ -52,23 +52,7 @@ enum ClixFlags : uint8_t {
   CLIX_FLAG_RANKS_DEGRADED = 1 << 1,
   CLIX_FLAG_ENRICH_COMPLETE = 1 << 2,
   CLIX_FLAG_BOOKS_AT_ROOT = 1 << 3,
-};
-
-enum ClixFormat : uint8_t {
-  CLIX_FORMAT_EPUB = 0,
-  CLIX_FORMAT_TXT = 1,
-  CLIX_FORMAT_MD = 2,
-  CLIX_FORMAT_XTC = 3,
-  CLIX_FORMAT_OTHER = 4,
-};
-
-// Where a record's author came from. Surfaced in the Details row so the screen
-// never silently claims a folder name is an author.
-enum ClixAuthorProvenance : uint8_t {
-  CLIX_AUTHOR_FROM_FOLDER = 0,
-  CLIX_AUTHOR_FROM_CACHE = 1,
-  CLIX_AUTHOR_FROM_OPF = 2,
-  CLIX_AUTHOR_UNKNOWN = 3,
+  CLIX_FLAG_DEDUP_DEGRADED = 1 << 4,
 };
 
 #pragma pack(push, 1)
@@ -112,14 +96,19 @@ static_assert(sizeof(ClixHeader) == 64, "ClixHeader must be exactly 64 bytes");
 struct ClixRecord {
   uint32_t nameOff;   // from nameStart, into the display-name blob
   uint32_t fileSize;  // captured while the dirent was open; part of the identity
-  uint16_t authorRank;
-  uint16_t dateRank;
+  // Reserved. Per-record inverse ranks used to live here; the authorOrder and
+  // dateOrder permutation sections carry that ordering and no reader ever read
+  // these back. Kept as padding so the record stays 128 bytes.
+  uint16_t reserved0;
+  uint16_t reserved1;
   uint16_t firstSeen;
   uint16_t folderId;
   uint8_t nameLen;
   uint8_t foldLen;
   uint8_t authorKeyLen;
-  uint8_t flags;  // b0-2 format, b3-4 author provenance, b5 titleFromOpf, b6 opfTooLarge
+  // Reserved. Held a packed book format, author provenance and title origin;
+  // nothing ever read them back. Written as 0 until a screen needs one of them.
+  uint8_t flags;
   char fold[CLIX_FOLD_BYTES];
   char authorKey[CLIX_AUTHOR_KEY_BYTES];
 };
@@ -132,20 +121,6 @@ struct ClixFolderHeader {
 static_assert(sizeof(ClixFolderHeader) == 1, "ClixFolderHeader must be 1 byte");
 
 #pragma pack(pop)
-
-// Record field accessors. The packing means the flags byte carries three things,
-// so nobody outside this header should be shifting bits by hand.
-inline ClixFormat recordFormat(const ClixRecord& r) { return static_cast<ClixFormat>(r.flags & 0x07); }
-inline ClixAuthorProvenance recordAuthorProvenance(const ClixRecord& r) {
-  return static_cast<ClixAuthorProvenance>((r.flags >> 3) & 0x03);
-}
-inline bool recordTitleFromOpf(const ClixRecord& r) { return (r.flags & (1 << 5)) != 0; }
-inline bool recordOpfTooLarge(const ClixRecord& r) { return (r.flags & (1 << 6)) != 0; }
-inline uint8_t makeRecordFlags(const ClixFormat format, const ClixAuthorProvenance provenance, const bool titleFromOpf,
-                               const bool opfTooLarge) {
-  return static_cast<uint8_t>((format & 0x07) | ((provenance & 0x03) << 3) | (titleFromOpf ? (1 << 5) : 0) |
-                              (opfTooLarge ? (1 << 6) : 0));
-}
 
 inline uint32_t alignUp(const uint32_t value) { return (value + CLIX_ALIGN - 1) / CLIX_ALIGN * CLIX_ALIGN; }
 

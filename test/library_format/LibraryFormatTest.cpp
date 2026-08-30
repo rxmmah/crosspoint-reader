@@ -164,23 +164,13 @@ TEST(LibraryFormatValidation, AcceptsAnEmptyLibrary) {
   EXPECT_EQ(h.selfSize, CLIX_ALIGN);
 }
 
-TEST(LibraryRecordFlags, PackAndUnpackRoundTrip) {
-  for (const uint8_t fmt : {CLIX_FORMAT_EPUB, CLIX_FORMAT_TXT, CLIX_FORMAT_XTC, CLIX_FORMAT_OTHER}) {
-    for (const uint8_t prov :
-         {CLIX_AUTHOR_FROM_FOLDER, CLIX_AUTHOR_FROM_CACHE, CLIX_AUTHOR_FROM_OPF, CLIX_AUTHOR_UNKNOWN}) {
-      for (const bool fromOpf : {false, true}) {
-        for (const bool tooLarge : {false, true}) {
-          ClixRecord r{};
-          r.flags =
-              makeRecordFlags(static_cast<ClixFormat>(fmt), static_cast<ClixAuthorProvenance>(prov), fromOpf, tooLarge);
-          EXPECT_EQ(recordFormat(r), fmt);
-          EXPECT_EQ(recordAuthorProvenance(r), prov);
-          EXPECT_EQ(recordTitleFromOpf(r), fromOpf);
-          EXPECT_EQ(recordOpfTooLarge(r), tooLarge);
-        }
-      }
-    }
-  }
+TEST(LibraryHeaderFlags, DedupDegradationIsPersistedWithoutChangingTheLayout) {
+  ClixHeader h = makeHeader(60, 116);
+  h.flags = CLIX_FLAG_WALK_COMPLETE | CLIX_FLAG_DEDUP_DEGRADED;
+
+  EXPECT_EQ(validateHeader(h, h.selfSize), ClixValidity::Ok);
+  EXPECT_NE(h.flags & CLIX_FLAG_DEDUP_DEGRADED, 0);
+  EXPECT_EQ(sizeof(ClixHeader), 64u);
 }
 
 TEST(LibraryFormat, ByteImageIsStableAcrossBuilds) {
@@ -188,8 +178,10 @@ TEST(LibraryFormat, ByteImageIsStableAcrossBuilds) {
   // offsets move and the on-disk format silently forks.
   EXPECT_EQ(offsetof(ClixRecord, nameOff), 0u);
   EXPECT_EQ(offsetof(ClixRecord, fileSize), 4u);
-  EXPECT_EQ(offsetof(ClixRecord, authorRank), 8u);
-  EXPECT_EQ(offsetof(ClixRecord, dateRank), 10u);
+  // Same offsets the retired authorRank/dateRank fields held: the bytes are
+  // reserved, not reclaimed, so the record layout is unchanged.
+  EXPECT_EQ(offsetof(ClixRecord, reserved0), 8u);
+  EXPECT_EQ(offsetof(ClixRecord, reserved1), 10u);
   EXPECT_EQ(offsetof(ClixRecord, firstSeen), 12u);
   EXPECT_EQ(offsetof(ClixRecord, folderId), 14u);
   EXPECT_EQ(offsetof(ClixRecord, nameLen), 16u);

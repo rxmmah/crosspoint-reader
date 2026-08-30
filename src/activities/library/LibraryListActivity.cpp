@@ -119,23 +119,11 @@ bool LibraryListActivity::openIndex() {
 }
 
 bool LibraryListActivity::rebuildIndex() {
-  // Carry the monotonic counter forward so "recently added" ordering survives a
-  // rebuild: a book that was already on the card must not jump to the top.
-  uint16_t carriedFirstSeen = 0;
-  {
-    library::LibraryIndexFile previous;
-    if (previous.open(library::libraryIndexPath())) carriedFirstSeen = previous.header().nextFirstSeen;
-  }
+  // The builder reads the previous index itself, so the monotonic "recently
+  // added" counter carries forward without this screen opening the file too,
+  // and it feeds the watchdog during the walk without a progress callback.
   library::BuildStats stats;
-  const bool ok = library::buildLibraryIndex(
-      "/", carriedFirstSeen, stats, SETTINGS.libraryUseMetadata != 0,
-      [](const uint16_t booksSoFar, const char*, void*) {
-        // Same watchdog feed as the Settings rebuild: the idle task must run
-        // or a 5 s panic timeout fires mid-walk.
-        if ((booksSoFar & 31u) == 0) delay(1);
-        return true;
-      },
-      nullptr);
+  const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0);
   if (!ok) {
     LOG_ERR("LIB", "index build failed");
     return false;

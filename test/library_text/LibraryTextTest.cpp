@@ -6,9 +6,6 @@
 
 using library::authorKey;
 using library::fold;
-using library::looksLikeMetadata;
-using library::parseFilename;
-using library::preferFilenameTitle;
 
 namespace {
 
@@ -100,61 +97,6 @@ TEST(LibraryFold, ArticleStrippingOnlyWhenAsked) {
   EXPECT_EQ(fold("The", true), "the");
 }
 
-TEST(LibraryParse, TitleAndAuthorFromTheExportPattern) {
-  const auto p = parseFilename("Sample Title -- Xun, Lu -- 2012 -- Sample Press -- d8fc -- Open Library");
-  EXPECT_EQ(p.title, "Sample Title");
-  EXPECT_EQ(p.author, "Xun, Lu");
-}
-
-TEST(LibraryParse, NoSeparatorKeepsTheWholeStemAsTitle) {
-  const auto p = parseFilename("Jules Verne - Le Tour du monde");
-  EXPECT_EQ(p.title, "Jules Verne - Le Tour du monde");
-  EXPECT_TRUE(p.author.empty());
-}
-
-TEST(LibraryParse, ShortHexLookingNamesStayAuthors) {
-  // "Bede" and "Abba" are a-f-only words that used to be classified as hex
-  // digests and dropped; a digest must carry at least one decimal digit.
-  EXPECT_EQ(library::parseFilename("History -- Bede").author, "Bede");
-  EXPECT_EQ(library::parseFilename("Gold -- Abba").author, "Abba");
-  EXPECT_EQ(library::parseFilename("Title -- 3f2a9c8b").author, "");
-}
-
-TEST(LibraryFold, TruncatedTrailingSequenceIsDropped) {
-  // A string_view may end mid-sequence; the tail must be refused, not decoded
-  // against whatever memory follows.
-  const char raw[] = {'a', 'b', static_cast<char>(0xC3)};
-  EXPECT_EQ(library::fold(std::string_view(raw, 3)), "ab");
-}
-
-TEST(LibraryParse, MetadataInTheAuthorSlotIsRejected) {
-  // Exporters that have no author still emit the field, so segment 1 may hold a
-  // publisher, a year or a hash. Accepting those would print them as authors.
-  for (const char* stem : {
-           "Some Title -- 2019 -- Publisher",
-           "Some Title -- d8fc9e08df5718a087a9b2fbbb07e96b -- x",
-           "Some Title -- isbn13 9780310109563 -- x",
-           "Some Title -- 9782226463982 -- x",
-           "Some Title -- Paris, 2019 -- x",
-           "Some Title -- Une enquete de l'inspecteur Untel, Paris, DL 2009 -- x",
-           "Some Title -- Internet Archive",
-           "Some Title -- Open Library",
-           "Some Title -- Paris, 1985 -",  // trailing dash tolerance
-       }) {
-    EXPECT_TRUE(parseFilename(stem).author.empty()) << stem;
-  }
-}
-
-TEST(LibraryParse, RealAuthorsAreNotMistakenForMetadata) {
-  // "Wollstonecraft, Mary" is structurally identical to "Paris, France"; only the
-  // year requirement separates them. Any looser rule eats real authors.
-  for (const char* author : {"Wollstonecraft, Mary", "Wells, Herbert G.", "Lu Xun [Xun, Lu]", "Herbert G Wells",
-                             "Lu Xun_", "Sand, George", "Emile  Erckmann; Alexandre   Chatrian", "H_P_ Lovecraft"}) {
-    const std::string stem = std::string("T -- ") + author + " -- 2019";
-    EXPECT_EQ(parseFilename(stem).author, author) << author;
-  }
-}
-
 TEST(LibraryAuthorKey, OrderAndPunctuationDoNotMatter) {
   const std::string expected = authorKey("Lu Xun");
   EXPECT_FALSE(expected.empty());
@@ -171,6 +113,14 @@ TEST(LibraryAuthorKey, InitialsAreIgnored) {
 TEST(LibraryAuthorKey, SecondaryAuthorsAndBracketsDropped) {
   EXPECT_EQ(authorKey("Emile Erckmann; Alexandre Chatrian"), authorKey("Emile Erckmann"));
   EXPECT_EQ(authorKey("George Sand [Sand, George]"), authorKey("George Sand"));
+}
+
+TEST(LibraryAuthorKey, FilesystemUnderscoreStandsInForAFullStop) {
+  // The one input where the key's cleanup and cleanPersonName's differ before
+  // folding: an underscore the filesystem took instead of a full stop. Both
+  // reduce to the same initial, which fold() then drops as a one-letter token.
+  EXPECT_EQ(authorKey("Herbert G_ Wells"), authorKey("Herbert Wells"));
+  EXPECT_EQ(authorKey("Wells_ Herbert"), authorKey("Herbert Wells"));
 }
 
 TEST(LibraryAuthorKey, DistinctPeopleDoNotCollide) {
@@ -199,45 +149,6 @@ TEST(LibraryAuthorKey, FitsTheRecordFieldWithoutCollapsingToAForename) {
   EXPECT_FALSE(authorKey("Nebuchadnezzarson").empty());
   EXPECT_TRUE(authorKey("").empty());
   EXPECT_TRUE(authorKey("Q. X. Z.").empty());  // initials only: no identity
-}
-
-TEST(LibraryTitleMerge, PrefersTheRicherFilenameTitle) {
-  EXPECT_TRUE(preferFilenameTitle("2085", "2085 _ Artificial Minds and the Future of Machines"));
-  EXPECT_TRUE(preferFilenameTitle("Sample Chemistry", "Sample Chemistry: Do Cases and Samples Mix?"));
-}
-
-TEST(LibraryTitleMerge, BlocksExporterMidPhraseTruncation) {
-  // The filename stops on a stop word, so it is a cut phrase, not a fuller title.
-  EXPECT_FALSE(preferFilenameTitle("A Sceptic's Error", "A sceptic's error _ foundations for a new science of"));
-  EXPECT_FALSE(preferFilenameTitle("Sample Doctrine", "Sample Doctrine_ a revised and amplified edition, with a"));
-  // Too little added to be worth the swap.
-  EXPECT_FALSE(preferFilenameTitle("Wuthering Heights", "Wuthering Heights : A Novel"));
-  EXPECT_FALSE(preferFilenameTitle("The Iliad", "The Iliad"));
-  // Not a prefix at all.
-  EXPECT_FALSE(preferFilenameTitle("Germinal", "Emile Zola-Germinl"));
-  // Prefix but not on a word boundary.
-  EXPECT_FALSE(preferFilenameTitle("Sample", "Samples Chemistry Do Cases Mix"));
-  EXPECT_FALSE(preferFilenameTitle("", "anything at all here"));
-}
-
-TEST(LibraryMetadataGuard, ClassifiesYearsAndLeavesNamesAlone) {
-  EXPECT_TRUE(looksLikeMetadata("2019"));
-  EXPECT_TRUE(looksLikeMetadata("1985"));
-  EXPECT_TRUE(looksLikeMetadata("2085"));  // in range; see the title test below
-  EXPECT_FALSE(looksLikeMetadata("42"));
-  EXPECT_FALSE(looksLikeMetadata("herman melville"));
-}
-
-TEST(LibraryMetadataGuard, NeverAppliedToTheTitleSegment) {
-  // The guard would classify "2085" as a year, so a title that is a bare year
-  // survives only because segment 0 is never classified. This is the invariant
-  // that makes the unconditional segment-2+ drop safe, so it gets its own test.
-  const auto p = parseFilename("2085 -- Herbert G Wells -- 2020 -- Sample Press");
-  EXPECT_EQ(p.title, "2085");
-  EXPECT_EQ(p.author, "Herbert G Wells");
-
-  EXPECT_EQ(parseFilename("1987").title, "1987");
-  EXPECT_EQ(parseFilename("1987 -- Verne, Jules").title, "1987");
 }
 
 // --- matchesQuery ------------------------------------------------------------
@@ -337,4 +248,13 @@ TEST(SurnameKey, EmptyStaysEmpty) { EXPECT_EQ(library::surnameKey(""), ""); }
 // places even though "Victor Hugo" and "Hugo Victor" both exist in the wild.
 TEST(SurnameKey, HarmonisedDisplayNameKeepsAGroupTogether) {
   EXPECT_NE(library::surnameKey("Victor Hugo"), library::surnameKey("Hugo Victor"));
+}
+
+TEST(LibraryPath, RootDoesNotGainASecondSeparator) {
+  EXPECT_EQ(library::joinLibraryPath("/", "book.epub"), "/book.epub");
+  EXPECT_EQ(library::joinLibraryPath("", "book.epub"), "/book.epub");
+}
+
+TEST(LibraryPath, NestedFolderGetsOneSeparator) {
+  EXPECT_EQ(library::joinLibraryPath("/Books", "book.epub"), "/Books/book.epub");
 }

@@ -33,21 +33,16 @@ namespace library {
 // and an uncapped walk would never return.
 inline constexpr int LIBRARY_MAX_DEPTH = 5;
 
-// Books held in the in-RAM sort arrays. The title pass costs 16 bytes a book
-// (one SortKey plus its ordinal); emitIndex is the real peak at 40 bytes a book,
-// holding the order, firstSeen, newOrdinal and canonicalFrom arrays alongside
-// the author and date SortKey/rank pairs at once. So 1024 books is a ~41 KB
-// transient during a rebuild and nothing at all while reading — the arrays are
-// gone before the screen opens.
-//
-// Raising this cannot destabilise the device: every one of those arrays comes
-// from makeUniqueNoThrow and a null result falls into the same degraded path a
-// library over the cap takes. A cap too low, by contrast, is silent — a 543-book
-// card sorts by nothing and only the title says so.
-//
-// Beyond the cap the index is still built and still complete, but in walk order
-// with CLIX_FLAG_RANKS_DEGRADED set, which the screen reports rather than hides.
-inline constexpr uint16_t LIBRARY_MAX_SORTED = 1024;
+// Books held in the in-RAM sort array. 14 bytes each, so this is 7 KB — one
+// bounded allocation, in the band the codebase allows without a heap gate.
+// Beyond it the index is still built and still complete, but in walk order with
+// CLIX_FLAG_RANKS_DEGRADED set, which the screen reports rather than hides.
+inline constexpr uint16_t LIBRARY_MAX_SORTED = 512;
+
+// Duplicate identities remembered while one directory is enumerated. The
+// fixed, fallible allocation is 8 KiB at this cap; unlike std::vector it cannot
+// grow into abort() when a damaged or unusually flat directory is scanned.
+inline constexpr uint16_t LIBRARY_MAX_DEDUP_KEYS = 1024;
 
 struct BuildStats {
   uint16_t books = 0;
@@ -63,25 +58,27 @@ struct BuildStats {
   uint16_t removed = 0;    // previous entry no book claimed
   uint16_t enriched = 0;   // took its title or author from the book rather than the filename
   bool ranksDegraded = false;
+  bool dedupDegraded = false;
   bool booksAtRoot = false;
 };
 
-// Progress callback, invoked as folders are entered so a long first scan can
-// show something. Returning false aborts the build and leaves any previous
-// index in place. A function pointer, not std::function: this runs during a
-// blocking phase where the repo's rules forbid heap churn.
+// Progress callback for observation and cancellation only. Watchdog servicing
+// belongs to the builder and does not depend on a caller providing a callback.
+// Returning false aborts the build and leaves any previous index in place. A
+// function pointer, not std::function: this runs during a blocking phase where
+// the repo's rules forbid heap churn.
 using BuildProgressFn = bool (*)(uint16_t booksSoFar, const char* currentPath, void* ctx);
 
 // Walk `rootPath`, write `/.crosspoint/library.idx`, and report what happened.
-// `previousNextFirstSeen` carries the monotonic counter across rebuilds so
-// "recently added" ordering survives; pass 0 on a first build.
-// `readMetadata` makes the walk prefer the title and author held INSIDE each
-// book over the ones its filename suggests. It only reads caches that already
-// exist — a book the reader has never opened keeps its filename — because
-// building that cache is the reader's own full indexing pass and would take
-// minutes across a library.
-bool buildLibraryIndex(const char* rootPath, uint16_t previousNextFirstSeen, BuildStats& stats,
-                       bool readMetadata = false, BuildProgressFn onProgress = nullptr, void* progressCtx = nullptr);
+// The previous index, including its monotonic "recently added" counter, is read
+// internally so callers cannot accidentally split one rebuild state across two
+// file opens.
+// `readMetadata` makes the walk prefer the title and author held inside each
+// book over its filename. It reads an existing cache when available; otherwise
+// it stops the normal EPUB parser at the end of <metadata>, before the manifest,
+// without building the reader's spine, TOC, CSS, or section caches.
+bool buildLibraryIndex(const char* rootPath, BuildStats& stats, bool readMetadata = false,
+                       BuildProgressFn onProgress = nullptr, void* progressCtx = nullptr);
 
 // Paths, exposed so the activity and the tests agree on them.
 const char* libraryIndexPath();

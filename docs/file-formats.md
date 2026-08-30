@@ -396,6 +396,16 @@ the author's words folded and sorted so that "Victor Hugo" and "Hugo Victor" gro
 one person. `authorKey` is a GROUPING key, not an ordering one: the shelf orders by
 surname, derived separately from the display name.
 
+Twelve bytes of each record are reserved and written as zero: two u16 at offsets
+8 and 10, and the flag byte at offset 19. The u16 pair held per-record inverse
+ranks for the author and date orders; the permutation sections carry that
+ordering and nothing read the ranks back. The flag byte packed a file format,
+an author provenance and a title-origin bit, none of which any screen read.
+They are reserved rather than reclaimed so the record stays 128 bytes and the
+layout is unchanged — a reader built before or after this change sees the same
+file. A screen that needs one of them can claim the bytes back and bump
+`CLIX_FORMAT_VERSION` then.
+
 ### The name blob
 
 Per record, at `nameStart + nameOff`:
@@ -418,6 +428,12 @@ placeholder — an index that saw part of the card must not claim otherwise.
 `RANKS_DEGRADED` says the author and date orders fell back to walk order, which
 happens past `LIBRARY_MAX_SORTED` books, where the sort arrays would not fit in
 RAM.
+
+`DEDUP_DEGRADED` says a directory exceeded the fixed 1024-entry duplicate-key
+buffer, or that its fallible 8 KiB allocation failed. The walk still indexes
+every enumerated book; it only stops remembering additional identities for
+duplicate-dirent detection, so a damaged FAT may expose duplicates but cannot
+make a real book disappear.
 
 `selfSize` is the expected file size. Comparing it against the real one is a free
 truncation guard: a build cut short by a power failure cannot pass.
