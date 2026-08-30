@@ -33,11 +33,26 @@ namespace library {
 // and an uncapped walk would never return.
 inline constexpr int LIBRARY_MAX_DEPTH = 5;
 
-// Books held in the in-RAM sort array. 14 bytes each, so this is 7 KB — one
-// bounded allocation, in the band the codebase allows without a heap gate.
-// Beyond it the index is still built and still complete, but in walk order with
-// CLIX_FLAG_RANKS_DEGRADED set, which the screen reports rather than hides.
-inline constexpr uint16_t LIBRARY_MAX_SORTED = 512;
+// Books held in the in-RAM sort arrays. 512 is low enough that ordinary shelves
+// land in the degraded path: a 543-book card builds a complete index in walk
+// order, and the shelf then hides the sort strip, the search tab and the A-Z
+// grid and calls itself "Library (unsorted)". Honest, but it withholds every
+// ordering the feature exists to provide.
+//
+// emitIndex is the peak, at 48 bytes a book held at once — priorList 12,
+// authorSort and dateSort 14 each, and order, resolvedFirstSeen, newOrdinalOf
+// and canonicalFrom 2 each — so 1024 books is a ~49 KB transient during a
+// rebuild and nothing at all while reading; the arrays are gone before the
+// screen opens. That is below the ~52 bytes a book this cost before the
+// per-record rank arrays were dropped in favour of the permutation sections.
+//
+// Raising this cannot destabilise the device: every one of those arrays comes
+// from makeUniqueNoThrow and a null result falls into the same degraded path a
+// library over the cap takes. A cap too low, by contrast, is silent.
+//
+// Beyond the cap the index is still built and still complete, but in walk order
+// with CLIX_FLAG_RANKS_DEGRADED set, which the screen reports rather than hides.
+inline constexpr uint16_t LIBRARY_MAX_SORTED = 1024;
 
 // Duplicate identities remembered while one directory is enumerated. The
 // fixed, fallible allocation is 8 KiB at this cap; unlike std::vector it cannot
