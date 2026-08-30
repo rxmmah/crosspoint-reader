@@ -33,7 +33,11 @@ bool LibraryIndexFile::open(const char* path) {
 }
 
 void LibraryIndexFile::close() {
-  file.close();
+  // A default-constructed HalFile holds no Impl, and its methods dereference it
+  // unguarded. close() runs before the first open — from open() itself, and from
+  // the destructor of an instance that never opened anything — so the handle has
+  // to be tested rather than assumed.
+  if (file) file.close();
   opened = false;
 }
 
