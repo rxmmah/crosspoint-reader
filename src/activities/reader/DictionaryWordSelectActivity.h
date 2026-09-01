@@ -94,7 +94,9 @@ class DictionaryWordSelectActivity final : public Activity {
   bool saveHighlight();
   bool drawHighlightWithSnapshot();
   void drawHints() const;
+  MappedInputManager::Button buttonForVisual(VisualDir dir) const;
   bool wasPressedVisual(VisualDir dir) const;
+  bool isPressedVisual(VisualDir dir) const;
   void paintWordBox(int idx, bool highlighted, int rangeLo, int rangeHi);
   void resetCursorToMiddle();
   bool rowIsRtl(uint16_t row) const;
@@ -116,6 +118,7 @@ class DictionaryWordSelectActivity final : public Activity {
   std::vector<WordBox> words;
   int selected = 0;
   uint16_t rowCount = 0;
+  unsigned long lastHorizontalMoveTime = 0;
 
   // TextBlock stores each line's words in visual (left-to-right) order; the
   // logical order is discarded at layout time. These map between the two so

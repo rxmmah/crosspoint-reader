@@ -24,6 +24,8 @@
 namespace {
 
 constexpr unsigned long POPUP_DURATION_MS = 1500;
+constexpr unsigned long WORD_REPEAT_START_MS = 500;
+constexpr unsigned long WORD_REPEAT_INTERVAL_MS = 500;
 
 // A token is selectable when it holds at least one non-punctuation codepoint;
 // dashes, bullets and the punctuation marks of any script that appear as
@@ -502,7 +504,7 @@ bool DictionaryWordSelectActivity::retreatPage() {
 // Within each axis the direction follows isNavDirectionSwapped() — the same
 // convention mapLabels() uses to place hint labels — so the cursor always
 // moves the way the drawn hints say it will.
-bool DictionaryWordSelectActivity::wasPressedVisual(const VisualDir dir) const {
+MappedInputManager::Button DictionaryWordSelectActivity::buttonForVisual(const VisualDir dir) const {
   using Button = MappedInputManager::Button;
   const auto orientation = renderer.getOrientation();
   const bool landscape =
@@ -544,7 +546,15 @@ bool DictionaryWordSelectActivity::wasPressedVisual(const VisualDir dir) const {
         break;
     }
   }
-  return mappedInput.wasPressed(button);
+  return button;
+}
+
+bool DictionaryWordSelectActivity::wasPressedVisual(const VisualDir dir) const {
+  return mappedInput.wasPressed(buttonForVisual(dir));
+}
+
+bool DictionaryWordSelectActivity::isPressedVisual(const VisualDir dir) const {
+  return mappedInput.isPressed(buttonForVisual(dir));
 }
 
 // Cross-page selection: while anchored, a forward move past the last word
@@ -701,17 +711,25 @@ void DictionaryWordSelectActivity::loop() {
   }
 
   if (handleCrossPageNavigation()) return;
+  // Holding a horizontal key repeats the step, so a long line can be crossed
+  // without a tap per word. Cross-page moves stay on discrete presses.
+  const unsigned long now = millis();
+  const bool repeat =
+      mappedInput.getHeldTime() >= WORD_REPEAT_START_MS && now - lastHorizontalMoveTime >= WORD_REPEAT_INTERVAL_MS;
   // Step in reading order, not storage (visual) order. Within a row the two
   // only differ by which key means forward, but at a row boundary stepping
   // the storage index would jump from the last reading word of an RTL row to
   // the first reading word of the *previous* row instead of onto the next.
   const bool rtl = rowIsRtl(words[selected].row);
-  const bool fwdKey = wasPressedVisual(rtl ? VisualDir::Left : VisualDir::Right);
-  const bool backKey = wasPressedVisual(rtl ? VisualDir::Right : VisualDir::Left);
+  const VisualDir fwdDir = rtl ? VisualDir::Left : VisualDir::Right;
+  const VisualDir backDir = rtl ? VisualDir::Right : VisualDir::Left;
+  const bool fwdKey = wasPressedVisual(fwdDir) || (repeat && isPressedVisual(fwdDir));
+  const bool backKey = wasPressedVisual(backDir) || (repeat && isPressedVisual(backDir));
   const int pos = readingPos[selected];
   if (backKey && pos > 0) {
     // canonicalIndex folds a landing on a chain continuation onto its start.
     selected = canonicalIndex(readingOrder[pos - 1]);
+    lastHorizontalMoveTime = now;
     requestUpdate();
   } else if (fwdKey) {
     // Step over our own continuation fragments; the landing word is never a
@@ -720,6 +738,7 @@ void DictionaryWordSelectActivity::loop() {
     while (next < static_cast<int>(words.size()) && words[readingOrder[next]].joinedPrefix >= 0) next++;
     if (next < static_cast<int>(words.size())) {
       selected = readingOrder[next];
+      lastHorizontalMoveTime = now;
       requestUpdate();
     }
   } else if (wasPressedVisual(VisualDir::Up)) {

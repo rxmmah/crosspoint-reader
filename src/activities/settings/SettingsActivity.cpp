@@ -5,6 +5,7 @@
 #include <HalDisplay.h>
 #include <LibraryBuilder.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -15,6 +16,7 @@
 #include "CrossPointSettings.h"
 #include "FontDownloadActivity.h"
 #include "KOReaderSettingsActivity.h"
+#include "KeyboardLayoutsActivity.h"
 #include "KoofrSettingsActivity.h"
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
@@ -97,6 +99,7 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts));
   readerSettings.insert(readerSettings.begin(),
                         SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
   readerSettings.insert(readerSettings.begin() + 1,
@@ -381,6 +384,13 @@ void SettingsActivity::toggleCurrentSetting() {
                                  rebuildSettingsLists();
                                });
         break;
+      case SettingAction::KeyboardLayouts:
+        if (auto activity = makeUniqueNoThrow<KeyboardLayoutsActivity>(renderer, mappedInput)) {
+          startActivityForResult(std::move(activity), nullptr);
+        } else {
+          LOG_ERR("SETTINGS", "OOM: KeyboardLayoutsActivity");
+        }
+        break;
       case SettingAction::None:
         // Do nothing
         break;
@@ -507,8 +517,8 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
 void SettingsActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   // Content below the GUI.drawHeader band, above the button hints.
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
+                                                static_cast<int16_t>(metrics.buttonHintsHeight), 0});
 
   buildTabBar(screen);
 

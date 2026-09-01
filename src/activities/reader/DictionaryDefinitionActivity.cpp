@@ -54,6 +54,9 @@ void DictionaryDefinitionActivity::onEnter() {
 void DictionaryDefinitionActivity::onExit() {
   sdFontSystem.releaseDictionaryFont(renderer);
   Activity::onExit();
+  if (auto* fcm = renderer.getFontCacheManager()) {
+    fcm->releaseSdFontCaches();
+  }
 }
 
 int DictionaryDefinitionActivity::measureSpan(const int fontId, const char* text, size_t len) const {
