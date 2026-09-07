@@ -281,10 +281,11 @@ void EpubReaderActivity::openWordSelect(const DictionaryWordSelectActivity::Mode
 
   // section.get() outlives the sub-activity (the reader is paused beneath it)
   // and enables highlight selections that continue onto the following pages.
-  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
-                             renderer, mappedInput, std::move(page), orientedMarginLeft, orientedMarginTop, mode,
-                             epub->getTitle(), std::move(chapterTitle), section.get(), section->currentPage),
-                         [this](const ActivityResult&) { requestUpdate(); });
+  startActivityForResult(
+      std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page), orientedMarginLeft,
+                                                     orientedMarginTop, mode, epub->getTitle(), epub->getAuthor(),
+                                                     std::move(chapterTitle), section.get(), section->currentPage),
+      [this](const ActivityResult&) { requestUpdate(); });
 }
 
 void EpubReaderActivity::loop() {
@@ -1732,9 +1733,7 @@ static_assert(std::size(kAlignIds) == CrossPointSettings::PARAGRAPH_ALIGNMENT_CO
 }  // namespace
 
 bool EpubReaderActivity::usesToolbarMenu() const {
-  // Touch-first chrome: button boards always get the classic list menu, even
-  // if a settings file (e.g. an SD card moved from a touch board) says Toolbar.
-  return mappedInput.hasTouch() && SETTINGS.readerMenuStyle == CrossPointSettings::READER_MENU_TOOLBAR;
+  return SETTINGS.readerMenuStyle == CrossPointSettings::READER_MENU_TOOLBAR;
 }
 
 std::string EpubReaderActivity::currentChapterTitle() const {

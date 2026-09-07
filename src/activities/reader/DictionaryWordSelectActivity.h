@@ -36,13 +36,15 @@ class DictionaryWordSelectActivity final : public Activity {
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                         std::unique_ptr<Page> page, int marginLeft, int marginTop,
                                         Mode mode = Mode::Dictionary, std::string bookTitle = {},
-                                        std::string chapterTitle = {}, Section* section = nullptr, int pageIndex = 0)
+                                        std::string bookAuthor = {}, std::string chapterTitle = {},
+                                        Section* section = nullptr, int pageIndex = 0)
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         marginLeft(marginLeft),
         marginTop(marginTop),
         mode(mode),
         bookTitle(std::move(bookTitle)),
+        bookAuthor(std::move(bookAuthor)),
         chapterTitle(std::move(chapterTitle)),
         section(section),
         originalPageIndex(pageIndex),
@@ -111,6 +113,7 @@ class DictionaryWordSelectActivity final : public Activity {
   const int marginTop;
   const Mode mode;
   const std::string bookTitle;
+  const std::string bookAuthor;
   const std::string chapterTitle;
   int fontId = 0;
   int lineHeight = 0;

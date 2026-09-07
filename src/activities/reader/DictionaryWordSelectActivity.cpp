@@ -635,7 +635,7 @@ bool DictionaryWordSelectActivity::saveHighlight() {
     if (!passage.empty() && !continuesPrev) passage += ' ';
     passage += words[idx].text;
   }
-  return HighlightStore::save(bookTitle, chapterTitle, passage);
+  return HighlightStore::save(bookTitle, bookAuthor, chapterTitle, passage);
 }
 
 void DictionaryWordSelectActivity::loop() {

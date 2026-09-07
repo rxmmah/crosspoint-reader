@@ -20,7 +20,8 @@ std::string memoChapter;
 
 namespace HighlightStore {
 
-bool save(const std::string& bookTitle, const std::string& chapterTitle, const std::string& passage) {
+bool save(const std::string& bookTitle, const std::string& bookAuthor, const std::string& chapterTitle,
+          const std::string& passage) {
   if (passage.empty()) return false;
   const std::string book = bookTitle.empty() ? "Untitled" : bookTitle;
 
@@ -31,9 +32,17 @@ bool save(const std::string& bookTitle, const std::string& chapterTitle, const s
       LOG_ERR("HILITE", "Cannot create %s", HIGHLIGHTS_DIR);
       return false;
     }
+    // "Author - Title.md", or "Title.md" when the EPUB carries no author.
+    std::string name;
+    name.reserve(bookAuthor.size() + book.size() + 3);
+    if (!bookAuthor.empty()) {
+      name += bookAuthor;
+      name += " - ";
+    }
+    name += book;
     path = HIGHLIGHTS_DIR;
     path += '/';
-    path += StringUtils::sanitizeFilename(book);
+    path += StringUtils::sanitizeFilename(name);
     path += ".md";
   } else {
     path = SINGLE_FILE_PATH;
@@ -49,7 +58,7 @@ bool save(const std::string& bookTitle, const std::string& chapterTitle, const s
   const bool sameChapter = sameBook && chapterTitle == memoChapter;
 
   // Single write: "# book" when the file is new or (single-file mode) the
-  // book changed, "## chapter" when the chapter changed, then the passage.
+  // book changed, "## chapter" when the chapter changed, then the "- " passage.
   std::string out;
   out.reserve(book.size() + chapterTitle.size() + passage.size() + 16);
   if (fresh || (!perBook && !sameBook)) {
@@ -63,7 +72,7 @@ bool save(const std::string& bookTitle, const std::string& chapterTitle, const s
     out += chapterTitle;
     out += '\n';
   }
-  out += "\n> ";
+  out += "\n- ";
   out += passage;
   out += '\n';
 
