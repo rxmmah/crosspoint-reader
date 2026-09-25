@@ -45,8 +45,6 @@ class HomeActivity final : public Activity {
     ++i;
     if (item == HomeMenuItem::FILE_BROWSER) return i;
     ++i;
-    if (item == HomeMenuItem::LIBRARY) return i;
-    ++i;
     if (item == HomeMenuItem::OPDS_BROWSER) return hasOpdsUrl ? i : 0;
     if (hasOpdsUrl) ++i;
     if (item == HomeMenuItem::HIGHLIGHT_SYNC) return hasKoofr ? i : 0;
@@ -60,7 +58,6 @@ class HomeActivity final : public Activity {
     int i = 0;
     if (idx == i++) return HomeMenuItem::LIBRARY;
     if (idx == i++) return HomeMenuItem::FILE_BROWSER;
-    if (idx == i++) return HomeMenuItem::LIBRARY;
     if (hasOpdsUrl && idx == i++) return HomeMenuItem::OPDS_BROWSER;
     if (hasKoofr && idx == i++) return HomeMenuItem::HIGHLIGHT_SYNC;
     if (idx == i) return HomeMenuItem::SETTINGS_MENU;
@@ -69,9 +66,6 @@ class HomeActivity final : public Activity {
   void onSelectBook(const std::string& path);
   void onFileBrowserOpen();
   void onLibraryOpen();
-  void onRecentsOpen();
-  // Open Recents such that returning from it restores the current selection.
-  void openRecentsAndReturnToSelection();
   void onSettingsOpen();
   void onOpdsBrowserOpen();
   void onHighlightSyncOpen();

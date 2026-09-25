@@ -41,6 +41,10 @@ class SdCardFontSystem {
   /// Returns 0 if not found. Used by CrossPointSettings::getReaderFontId().
   int resolveFontId(const char* familyName, uint8_t pointSize) const;
 
+  // Temporarily load the dictionary family without changing reader settings.
+  // Caller holds the render lock and restores the reader with ensureLoaded().
+  bool loadDictionaryFont(GfxRenderer& renderer);
+
   /// Access the registry (e.g. for settings UI to enumerate available fonts).
   const SdCardFontRegistry& registry() const { return registry_; }
 
@@ -48,7 +52,7 @@ class SdCardFontSystem {
   SdCardFontRegistry& registry() { return registry_; }
 
   /// Mark the registry as needing re-discovery.
-  /// Thread-safe: can be called from the web server task.
+  /// Thread-safe: can be called from a background task.
   void markRegistryDirty() { registryDirty_.store(true, std::memory_order_release); }
 
   /// If the registry is dirty, re-scan the SD card now and clear the flag.

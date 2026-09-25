@@ -245,7 +245,7 @@ void EpubReaderActivity::openReaderMenu() {
   startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                              renderer, mappedInput, epub->getTitle(), position.displayPage(), position.totalPages,
                              bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(),
-                             !cachedBookmarks.empty(), EpubReaderMenuActivity::Features{}),
+                             !cachedBookmarks.empty()),
                          [this](const ActivityResult& result) {
                            const auto& menu = std::get<MenuResult>(result.data);
 
@@ -301,7 +301,7 @@ void EpubReaderActivity::openWordSelect(const DictionaryWordSelectActivity::Mode
   // and enables highlight selections that continue onto the following pages.
   startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
                              renderer, mappedInput, std::move(page), orientedMarginLeft, orientedMarginTop, mode,
-                             epub->getTitle(), std::move(chapterTitle), section.get(), section->currentPage),
+                             epub->getTitle(), epub->getAuthor(), std::move(chapterTitle), section.get(), section->currentPage),
                          [this](const ActivityResult&) { requestUpdate(); });
 }
 
@@ -622,6 +622,13 @@ void EpubReaderActivity::loop() {
     } else {
       openFootnoteSelect(false);
     }
+    return;
+  }
+
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::HIGHLIGHT &&
+      mappedInput.wasReleased(MappedInputManager::Button::Power) &&
+      !mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+    openWordSelect(DictionaryWordSelectActivity::Mode::Highlight);
     return;
   }
 
@@ -2393,8 +2400,7 @@ void EpubReaderActivity::applyReaderTextSettings() {
 // two entries that have their own tool (chapters -> Contents, text -> Text).
 void EpubReaderActivity::buildMoreActions() {
   using MA = EpubReaderMenuActivity::MenuAction;
-  EpubReaderMenuActivity::buildMenuItems(moreItems, !currentPageFootnotes.empty(), !cachedBookmarks.empty(),
-                                         EpubReaderMenuActivity::Features{});
+  EpubReaderMenuActivity::buildMenuItems(moreItems, !currentPageFootnotes.empty(), !cachedBookmarks.empty());
   moreItems.erase(std::remove_if(moreItems.begin(), moreItems.end(),
                                  [](const auto& item) {
                                    return item.action == MA::SELECT_CHAPTER || item.action == MA::TEXT_SETTINGS;

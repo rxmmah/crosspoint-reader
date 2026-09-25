@@ -34,9 +34,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     INVERTED_BLACK_AND_WHITE = 2,
     SLEEP_SCREEN_COVER_FILTER_COUNT
   };
-  // Action for a short Back press on the home menu, where Back has no navigation target.
-  enum HOME_BACK_ACTION { HOME_BACK_NONE = 0, HOME_BACK_RESUME = 1, HOME_BACK_RECENTS = 2, HOME_BACK_ACTION_COUNT };
-
   enum STATUS_BAR_PROGRESS_BAR {
     BOOK_PROGRESS = 0,
     CHAPTER_PROGRESS = 1,
@@ -112,9 +109,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   enum FONT_FAMILY { NOTOSERIF = 0, NOTOSANS = 1, FONT_FAMILY_COUNT };
   static constexpr uint8_t LEGACY_OPENDYSLEXIC = 2;
   static constexpr uint8_t BUILTIN_FONT_COUNT = FONT_FAMILY_COUNT;
-  // Dictionary definition font: follow the book font, or pin one built-in
-  // family so definitions render the same regardless of the reading font.
-  enum DICTIONARY_FONT { DICT_FONT_BOOK = 0, DICT_FONT_NOTOSERIF = 1, DICT_FONT_NOTOSANS = 2, DICTIONARY_FONT_COUNT };
+  enum DICTIONARY_FONT_FAMILY {
+    DICTIONARY_FONT_READER = 0,
+    DICTIONARY_FONT_SERIF = 1,
+    DICTIONARY_FONT_SANS = 2,
+    DICTIONARY_FONT_SD = 3
+  };
   // Reader font size is a point size, not an enum slot — see fontPointSize.
   // Legacy 1.4-and-earlier files stored a 0..3 SMALL/MEDIUM/LARGE/EXTRA_LARGE
   // slot; fromJson() folds that range up (see LEGACY_FONT_SIZE_MAX).
@@ -160,6 +160,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     FORCE_REFRESH = 3,
     FOOTNOTES = 4,
     PWR_CONFIRM = 5,
+    HIGHLIGHT = 6,
     SHORT_PWRBTN_COUNT
   };
 
@@ -349,15 +350,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char sdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
   char dictionaryName[32] = "";
-  // Font for dictionary definitions (DICTIONARY_FONT values). Persisted manually
-  // in toJson/fromJson — its settings entry is only inserted when dictionaries
-  // exist, so the generic SettingsList loop never sees it.
-  uint8_t dictionaryFont = DICT_FONT_BOOK;
-  // SD card font family for dictionary definitions (empty = use dictionaryFont).
-  // Lets e.g. an Arabic family render en-ar definitions the built-in fonts have
-  // no glyphs for. Loaded on demand by SdCardFontSystem::acquireDictionaryFont()
-  // — getDictionaryFontId() alone cannot resolve it. Persisted manually.
-  char dictionarySdFontName[32] = "";
+  uint8_t dictionaryFontFamily = DICTIONARY_FONT_READER;
+  char dictionarySdFontFamilyName[32] = "";
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // Show the title and author read from inside each book rather than its
@@ -369,8 +363,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t moveFinishedToReadFolder = 0;
   // Short press Back goes to file browser instead of home (0 = disabled, 1 = enabled)
   uint8_t backShortToFileBrowser = 0;
-  // What a short Back press does on the home menu (HOME_BACK_ACTION)
-  uint8_t homeBackAction = HOME_BACK_RESUME;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Tilt-based page turning (X3 only — requires QMI8658 IMU)

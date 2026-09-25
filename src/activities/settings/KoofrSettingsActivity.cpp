@@ -13,6 +13,18 @@ namespace {
 constexpr int MENU_ITEMS = 4;
 const StrId menuNames[MENU_ITEMS] = {StrId::STR_KOOFR_EMAIL, StrId::STR_KOOFR_APP_PASSWORD,
                                      StrId::STR_KOOFR_REMOTE_FOLDER, StrId::STR_KOOFR_WEBDAV_URL};
+
+std::string settingValue(const int index) {
+  if (index == 0) return KOOFR_STORE.getUsername().empty() ? tr(STR_NOT_SET) : KOOFR_STORE.getUsername();
+  if (index == 1) return KOOFR_STORE.getPassword().empty() ? tr(STR_NOT_SET) : "******";
+  if (index == 2) return KOOFR_STORE.getEffectiveRemoteDir();
+  const auto& serverUrl = KOOFR_STORE.getServerUrl();
+  if (!serverUrl.empty()) return serverUrl;
+  std::string defaultUrl = KOOFR_STORE.getBaseUrl();
+  const auto schemeEnd = defaultUrl.find("://");
+  if (schemeEnd != std::string::npos) defaultUrl.erase(0, schemeEnd + 3);
+  return std::string(tr(STR_DEFAULT_VALUE)) + ": " + defaultUrl;
+}
 }  // namespace
 
 void KoofrSettingsActivity::onEnter() {
@@ -37,16 +49,18 @@ void KoofrSettingsActivity::loop() {
     return;
   }
 
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight =
-      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
-  int touchSel = static_cast<int>(selectedIndex);
-  const auto listTouch = handleListTouch(touchSel, MENU_ITEMS, contentTop, contentHeight, false);
-  if (listTouch != ListTouchResult::None) {
-    selectedIndex = static_cast<size_t>(touchSel);
-    if (listTouch == ListTouchResult::Activated) activateSelected();
-    return;
+  int x = 0;
+  int y = 0;
+  if (mappedInput.wasScreenTapped(x, y)) {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    const int rowHeight = GUI.getMenuRowHeight(renderer);
+    const int index = (y - contentTop) / rowHeight;
+    if (y >= contentTop && index >= 0 && index < MENU_ITEMS) {
+      selectedIndex = static_cast<size_t>(index);
+      activateSelected();
+      return;
+    }
   }
 
   buttonNavigator.onNext([this] {
@@ -124,32 +138,11 @@ void KoofrSettingsActivity::render(RenderLock&&) {
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
-  GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, MENU_ITEMS, static_cast<int>(selectedIndex),
-      [](int index) { return std::string(I18N.get(menuNames[index])); }, nullptr, nullptr,
-      [](int index) {
-        if (index == 0) {
-          const auto& username = KOOFR_STORE.getUsername();
-          return username.empty() ? std::string(tr(STR_NOT_SET)) : username;
-        }
-        if (index == 1) {
-          return KOOFR_STORE.getPassword().empty() ? std::string(tr(STR_NOT_SET)) : std::string("******");
-        }
-        if (index == 2) {
-          return KOOFR_STORE.getEffectiveRemoteDir();
-        }
-        // WebDAV URL: show the default that is actually in use, scheme stripped
-        // for space, when the user hasn't overridden it.
-        const auto& serverUrl = KOOFR_STORE.getServerUrl();
-        if (!serverUrl.empty()) return serverUrl;
-        std::string defaultUrl = KOOFR_STORE.getBaseUrl();
-        const auto schemeEnd = defaultUrl.find("://");
-        if (schemeEnd != std::string::npos) {
-          defaultUrl.erase(0, schemeEnd + 3);
-        }
-        return std::string(tr(STR_DEFAULT_VALUE)) + ": " + defaultUrl;
-      },
-      true);
+  GUI.drawButtonMenu(renderer, Rect{0, contentTop, pageWidth, contentHeight}, MENU_ITEMS, static_cast<int>(selectedIndex),
+                     [](int index) {
+                       return std::string(I18N.get(menuNames[index])) + ": " + settingValue(index);
+                     },
+                     [](int) { return UIIcon::None; });
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

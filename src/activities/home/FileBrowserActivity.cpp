@@ -535,6 +535,13 @@ bool FileBrowserActivity::handleCustomInput() {
 }
 
 bool FileBrowserActivity::handleButtons() {
+  // USB Drive hands the raw SD card to a connected computer, so require a
+  // deliberate Power hold from the file browser before leaving it.
+  if (mode == Mode::Books && mappedInput.wasLongPressed(MappedInputManager::Button::Power, GO_HOME_MS)) {
+    activityManager.goToUsbDrive();
+    return true;
+  }
+
   if (mode == Mode::Books && mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, GO_HOME_MS)) {
     app.clearTapFlash();
     showEntryActions();

@@ -20,7 +20,8 @@ std::string memoChapter;
 
 namespace HighlightStore {
 
-bool save(const std::string& bookTitle, const std::string& chapterTitle, const std::string& passage) {
+bool save(const std::string& bookTitle, const std::string& bookAuthor, const std::string& chapterTitle,
+          const std::string& passage) {
   if (passage.empty()) return false;
   const std::string book = bookTitle.empty() ? "Untitled" : bookTitle;
 
@@ -33,6 +34,10 @@ bool save(const std::string& bookTitle, const std::string& chapterTitle, const s
     }
     path = HIGHLIGHTS_DIR;
     path += '/';
+    if (!bookAuthor.empty()) {
+      path += StringUtils::sanitizeFilename(bookAuthor);
+      path += " - ";
+    }
     path += StringUtils::sanitizeFilename(book);
     path += ".md";
   } else {
@@ -63,7 +68,7 @@ bool save(const std::string& bookTitle, const std::string& chapterTitle, const s
     out += chapterTitle;
     out += '\n';
   }
-  out += "\n> ";
+  out += "\n- ";
   out += passage;
   out += '\n';
 

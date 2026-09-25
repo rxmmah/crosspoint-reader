@@ -109,7 +109,7 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
 }
 
 void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
-  // If the web server (or another task) installed/deleted fonts, re-discover.
+  // If another task installed/deleted fonts, re-discover.
   // Track whether we just re-discovered so we can force a reload below even
   // when the wanted family/size still maps to the same point size — the file
   // contents on disk may have changed (e.g. user re-uploaded a new build).
@@ -522,3 +522,26 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
 }
 
 #endif  // CROSSPOINT_VECTOR_FONTS
+
+bool SdCardFontSystem::loadDictionaryFont(GfxRenderer& renderer) {
+  const bool registryWasDirty = registryDirty_.exchange(false, std::memory_order_acquire);
+  if (registryWasDirty) registry_.discover();
+  const auto* family = registry_.findFamily(SETTINGS.dictionarySdFontFamilyName);
+  if (!family) {
+    LOG_ERR("SDFS", "Dictionary font not found: %s", SETTINGS.dictionarySdFontFamilyName);
+    return false;
+  }
+  const auto* size = family->findNearestSize(SETTINGS.fontPointSize);
+  if (!registryWasDirty && size && manager_.currentFamilyName() == family->name &&
+      manager_.currentPointSize() == size->pointSize) {
+    return true;
+  }
+  manager_.unloadAll(renderer);
+  if (!manager_.loadFamily(*family, renderer, SETTINGS.fontPointSize)) {
+    LOG_ERR("SDFS", "Failed to load dictionary font: %s", SETTINGS.dictionarySdFontFamilyName);
+    ensureLoaded(renderer);
+    return false;
+  }
+  setupUiFallbacks(renderer);
+  return true;
+}

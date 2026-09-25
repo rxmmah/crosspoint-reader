@@ -140,7 +140,6 @@ enum UIIcon {
   Transfer,
   Library,
   Wifi,
-  Hotspot,
   Bookmark,
   Usb,
   Blocks
@@ -235,6 +234,7 @@ class BaseTheme {
   // slot. Rescaling a dithered bitmap aliases badly, so overflow is cropped.
   static bool drawCoverThumbFill(const GfxRenderer& renderer, const Bitmap& bitmap, Rect slot, int xOffset = 0);
   static void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total);
+  static void drawBookProgress(const GfxRenderer& renderer, Rect coverRect, int percent);
   void drawBatteryLeft(const GfxRenderer& renderer, Rect rect,
                        bool showPercentage = true) const;  // Left aligned (reader mode)
   virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const;

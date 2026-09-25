@@ -2,6 +2,7 @@
 
 #include <BidiUtils.h>
 #include <Epub/Section.h>
+#include <Epub/hyphenation/HyphenationCommon.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <Memory.h>
@@ -35,7 +36,7 @@ bool isSelectableToken(const char* text) {
   while (*p != 0) {
     const uint32_t cp = utf8NextCodepoint(&p);
     if (cp == 0) break;
-    if (!utf8IsPunctuation(cp)) return true;
+    if (!isPunctuation(cp)) return true;
   }
   return false;
 }
@@ -630,7 +631,7 @@ bool DictionaryWordSelectActivity::saveHighlight() {
     if (!passage.empty() && !continuesPrev) passage += ' ';
     passage += words[idx].text;
   }
-  return HighlightStore::save(bookTitle, chapterTitle, passage);
+  return HighlightStore::save(bookTitle, bookAuthor, chapterTitle, passage);
 }
 
 void DictionaryWordSelectActivity::loop() {
@@ -667,13 +668,11 @@ void DictionaryWordSelectActivity::loop() {
     handleConfirmRelease();
     return;
   }
-  // Short Power press looks the selected word up. A long press never reaches
+  // Short Power press highlights the selected word in Highlight mode. A long press never reaches
   // here (main.cpp sleeps the device first), and neither does the
   // Power+Down screenshot combo, which main.cpp consumes before this loop.
-  // Keeping lookup on its own button leaves Confirm free to mean "highlight"
-  // in every mode that can highlight.
-  if (mode != Mode::Highlight && mappedInput.wasReleased(MappedInputManager::Button::Power) && !words.empty()) {
-    performLookup();
+  if (mode == Mode::Highlight && mappedInput.wasReleased(MappedInputManager::Button::Power) && !words.empty()) {
+    toggleHighlight();
     return;
   }
 

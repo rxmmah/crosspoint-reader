@@ -135,7 +135,7 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
   const bool nextZone = inverted ? x < (width * 2) / 3 : x >= width / 3;
   result.next = nextTaps && (!prevTaps || nextZone);
   result.prev = prevTaps && (!nextTaps || !nextZone);
-  result.heldMs = gpio.lastTouchHeldMs();
+  result.heldMs = input.getHeldTime();
   return result;
 }
 

@@ -167,6 +167,22 @@ void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const si
   renderer.drawCenteredText(UI_10_FONT_ID, rect.y + rect.height + 15, percentText.c_str());
 }
 
+void BaseTheme::drawBookProgress(const GfxRenderer& renderer, const Rect coverRect, const int percent) {
+  if (percent < 0 || coverRect.width < 24 || coverRect.height < 24) return;
+  constexpr int stripHeight = 22;
+  const int stripY = coverRect.y + 4;
+  renderer.fillRect(coverRect.x + 2, stripY, coverRect.width - 4, stripHeight, false);
+  renderer.drawRect(coverRect.x + 2, stripY, coverRect.width - 4, stripHeight);
+  char label[5];
+  snprintf(label, sizeof(label), "%d%%", percent);
+  renderer.drawCenteredText(UI_10_FONT_ID, stripY + 1, label);
+  const int barWidth = coverRect.width - 16;
+  const int barX = coverRect.x + 8;
+  const int barY = stripY + stripHeight - 6;
+  renderer.drawRect(barX, barY, barWidth, 4);
+  renderer.fillRect(barX + 1, barY + 1, (barWidth - 2) * percent / 100, 2);
+}
+
 // Centre a button-hint label inside its box. A label that fits is drawn on the
 // single baseline it always was; one too wide used to overflow the button border
 // and run into the neighbouring hint, and now wraps to at most two centred lines
@@ -684,6 +700,8 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     renderer.drawCenteredText(UI_12_FONT_ID, y, tr(STR_NO_OPEN_BOOK));
     renderer.drawCenteredText(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), tr(STR_START_READING));
   }
+  if (hasContinueReading)
+    drawBookProgress(renderer, Rect{bookX, bookY, bookWidth, bookHeight}, recentBooks[0].progressPercent);
 }
 
 int BaseTheme::getMenuRowHeight(const GfxRenderer&) const { return UITheme::getInstance().getMetrics().menuRowHeight; }

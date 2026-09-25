@@ -180,69 +180,6 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
   return s;
 }
 
-// Build the dictionary font setting: Book Font (follow the reader), the two
-// built-in families, plus any SD card families — an SD family is what makes
-// non-Latin dictionary definitions (e.g. Arabic) renderable when the book
-// font has no such glyphs. Selection persists across two fields like the
-// reader font: dictionarySdFontName when an SD family is chosen (loaded on
-// demand by SdCardFontSystem::acquireDictionaryFont), dictionaryFont
-// otherwise. Both are saved manually in CrossPointSettings::toJson/fromJson.
-inline SettingInfo buildDictionaryFontSetting(const SdCardFontRegistry* registry) {
-  SettingInfo s;
-  s.nameId = StrId::STR_DICTIONARY_FONT;
-  s.type = SettingType::ENUM;
-  s.key = "dictionaryFont";
-  s.category = StrId::STR_CAT_READER;
-
-  std::vector<std::string> sdFamilyNames;
-  if (registry) {
-    const auto& families = registry->getFamilies();
-    sdFamilyNames.reserve(families.size());
-    std::transform(families.begin(), families.end(), std::back_inserter(sdFamilyNames),
-                   [](const SdCardFontFamilyInfo& f) { return f.name; });
-  }
-
-  if (sdFamilyNames.empty()) {
-    s.enumValues = {StrId::STR_BOOK_FONT, StrId::STR_NOTO_SERIF, StrId::STR_NOTO_SANS};
-  } else {
-    s.enumStringValues.reserve(CrossPointSettings::DICTIONARY_FONT_COUNT + sdFamilyNames.size());
-    s.enumStringValues.push_back(I18N.get(StrId::STR_BOOK_FONT));
-    s.enumStringValues.push_back(I18N.get(StrId::STR_NOTO_SERIF));
-    s.enumStringValues.push_back(I18N.get(StrId::STR_NOTO_SANS));
-    s.enumStringValues.insert(s.enumStringValues.end(), sdFamilyNames.begin(), sdFamilyNames.end());
-  }
-
-  s.valueGetter = [sdFamilyNames]() -> uint8_t {
-    if (SETTINGS.dictionarySdFontName[0] != '\0') {
-      for (size_t i = 0; i < sdFamilyNames.size(); i++) {
-        // Compare within the settings field capacity: an over-long family name
-        // is stored truncated, and must still match its list entry.
-        if (strncmp(sdFamilyNames[i].c_str(), SETTINGS.dictionarySdFontName,
-                    sizeof(SETTINGS.dictionarySdFontName) - 1) == 0) {
-          return static_cast<uint8_t>(CrossPointSettings::DICTIONARY_FONT_COUNT + i);
-        }
-      }
-      // Name no longer on the card — show the fallback that will actually render.
-    }
-    return SETTINGS.dictionaryFont < CrossPointSettings::DICTIONARY_FONT_COUNT ? SETTINGS.dictionaryFont : 0;
-  };
-
-  s.valueSetter = [sdFamilyNames](uint8_t v) {
-    if (v < CrossPointSettings::DICTIONARY_FONT_COUNT) {
-      SETTINGS.dictionaryFont = v;
-      SETTINGS.dictionarySdFontName[0] = '\0';
-      return;
-    }
-    const size_t sdIdx = v - CrossPointSettings::DICTIONARY_FONT_COUNT;
-    if (sdIdx < sdFamilyNames.size()) {
-      strncpy(SETTINGS.dictionarySdFontName, sdFamilyNames[sdIdx].c_str(), sizeof(SETTINGS.dictionarySdFontName) - 1);
-      SETTINGS.dictionarySdFontName[sizeof(SETTINGS.dictionarySdFontName) - 1] = '\0';
-    }
-  };
-
-  return s;
-}
-
 // Reader Menu is the last entry and is only offered on boards with a home key.
 // The order must match CrossPointSettings::LONG_PRESS_MENU_FUNCTION, whose
 // indices are persisted.
@@ -257,8 +194,7 @@ inline std::vector<StrId> buildLongPressMenuValues() {
 inline std::vector<StrId> homeThemeValues() {
   static constexpr StrId VALUES[] = {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
                                      StrId::STR_THEME_ROUNDEDRAFF, StrId::STR_THEME_COVER_GRID};
-  const size_t count = UITheme::supportsCoverGrid() ? std::size(VALUES) : std::size(VALUES) - 1;
-  return {VALUES, VALUES + count};
+  return {VALUES, VALUES + std::size(VALUES) - 1};
 }
 
 // Shared settings list used by both the device settings UI and the web settings API.
@@ -419,13 +355,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
 #if FREEINK_CAP_TOUCH
         SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
                           {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
-                           StrId::STR_FOOTNOTES, StrId::STR_CONFIRM},
+                           StrId::STR_FOOTNOTES, StrId::STR_CONFIRM, StrId::STR_HIGHLIGHT},
                           "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #else
-        SettingInfo::Enum(
-            StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-            {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
-            "shortPwrBtn", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
+                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
+                           StrId::STR_FOOTNOTES, StrId::STR_CONFIRM, StrId::STR_HIGHLIGHT},
+                          "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #endif
         // Erased below unless the QMI8658 IMU is present (X3).
         SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
@@ -435,10 +371,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_BACK_SHORT_TO_FILE_BROWSER, &CrossPointSettings::backShortToFileBrowser,
                             "backShortToFileBrowser", StrId::STR_CAT_CONTROLS),
-        SettingInfo::Enum(StrId::STR_HOME_BACK_ACTION, &CrossPointSettings::homeBackAction,
-                          {StrId::STR_NONE_OPT, StrId::STR_RESUME, StrId::STR_MENU_RECENT_BOOKS}, "homeBackAction",
-                          StrId::STR_CAT_CONTROLS),
-
         // --- System ---
         SettingInfo::Value(
             StrId::STR_TIME_TO_SLEEP, &CrossPointSettings::sleepTimeoutMinutes,
@@ -629,10 +561,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     auto it =
         std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.category == StrId::STR_CAT_CONTROLS; });
     it = v.insert(it, buildDictionarySetting(*dictionaries));
-    // Definition font pin, right under the dictionary selector. Persisted
-    // manually in CrossPointSettings::toJson/fromJson — this entry is absent
-    // from the base list the generic persistence loop iterates.
-    v.insert(it + 1, buildDictionaryFontSetting(registry));
+    v.insert(it + 1, SettingInfo::Enum(
+                         StrId::STR_DICTIONARY_FONT_FAMILY, &CrossPointSettings::dictionaryFontFamily,
+                         {StrId::STR_SAME_AS_READER, StrId::STR_NOTO_SERIF, StrId::STR_NOTO_SANS, StrId::STR_SD_FONT},
+                         "dictionaryFontFamily", StrId::STR_CAT_READER));
   }
   return v;
 }

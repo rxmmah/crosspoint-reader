@@ -49,10 +49,7 @@ class DictionaryDefinitionActivity final : public Activity {
 
   void wrapText();
   int measureSpan(int fontId, const char* text, size_t len) const;
-  // Body text font, resolved once in onEnter via
-  // sdFontSystem.acquireDictionaryFont() (may load an SD font on demand;
-  // released in onExit). 0 only before onEnter runs.
-  int bodyFontId = 0;
+  bool dictionaryFontLoaded = false;
   void drawBody(int fontId, int x, int startY) const;
   // Re-looks-up `word` in the dictionary `direction` steps away (wrapping),
   // replacing headword/definition and resetting to page 0. No-op with fewer

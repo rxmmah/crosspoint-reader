@@ -115,9 +115,9 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (dictionaryName[0] != '\0') {
     doc["dictionaryName"] = dictionaryName;
   }
-  // Dictionary font — its settings entry only exists when dictionaries are
-  // installed, so the generic loop above never sees it; save manually.
-  doc["dictionaryFont"] = dictionaryFont;
+  if (dictionarySdFontFamilyName[0] != '\0') {
+    doc["dictionarySdFontFamilyName"] = dictionarySdFontFamilyName;
+  }
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
@@ -266,9 +266,16 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   }
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
   copyToField(dictionaryName, doc["dictionaryName"] | "", sizeof(dictionaryName));
-  // Dictionary font — not in the base SettingsList, load manually
-  dictionaryFont =
-      clamp(doc["dictionaryFont"] | (uint8_t)DICT_FONT_BOOK, DICTIONARY_FONT_COUNT, (uint8_t)DICT_FONT_BOOK);
+  const char* dictionarySdFont = doc["dictionarySdFontFamilyName"].isNull() ? doc["dictionarySdFontName"] | ""
+                                                                            : doc["dictionarySdFontFamilyName"] | "";
+  copyToField(dictionarySdFontFamilyName, dictionarySdFont, sizeof(dictionarySdFontFamilyName));
+  if (doc["dictionaryFontFamily"].isNull()) {
+    // Migrate the personal branch's combined built-in/SD font selection.
+    dictionaryFontFamily = dictionarySdFontFamilyName[0] != '\0'
+                               ? static_cast<uint8_t>(DICTIONARY_FONT_SD)
+                               : clamp(doc["dictionaryFont"] | uint8_t{0}, 3, DICTIONARY_FONT_READER);
+    if (!doc["dictionaryFont"].isNull() || !doc["dictionarySdFontName"].isNull()) needsResave = true;
+  }
 
   // Language -- stored as code string for stability across enum reorders.
   if (doc["language"].is<const char*>()) {
@@ -425,11 +432,16 @@ int CrossPointSettings::getReaderFontId() const {
 }
 
 int CrossPointSettings::getDictionaryFontId() const {
-  if (dictionaryFont == DICT_FONT_BOOK) return getReaderFontId();
-  // Pinned built-in family, independent of the book font. Reuses the reader
-  // point size, snapped to a size the built-in families actually ship (the
-  // active size may come from an SD family with arbitrary sizes).
+  if (dictionaryFontFamily == DICTIONARY_FONT_READER) return getReaderFontId();
+  if (dictionaryFontFamily == DICTIONARY_FONT_SD) {
+    if (dictionarySdFontFamilyName[0] != '\0' && sdFontIdResolver) {
+      const int id = sdFontIdResolver(sdFontResolverCtx, dictionarySdFontFamilyName, fontPointSize);
+      if (id != 0) return id;
+    }
+    return getReaderFontId();
+  }
+
   const uint8_t pt =
       snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
-  return builtinFontId(dictionaryFont == DICT_FONT_NOTOSANS, pt);
+  return builtinFontId(dictionaryFontFamily == DICTIONARY_FONT_SANS, pt);
 }

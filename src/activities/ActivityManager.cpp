@@ -6,7 +6,6 @@
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <Memory.h>
-#include <VectorFontSupport.h>
 
 #include <algorithm>
 
@@ -116,9 +115,8 @@ void ActivityManager::loop() {
     // panels' etched glass makes unreliable). The reader keeps its clean page
     // (no status bar there to tap). Touch boards only, like the swipe itself.
     bool statusBarTap = false;
-    if (mappedInput.hasTouch() &&
-        (currentActivity->name == "Home" || currentActivity->name == "FileBrowser" ||
-         currentActivity->name == "Settings" || currentActivity->name == "NetworkModeSelection")) {
+    if (mappedInput.hasTouch() && (currentActivity->name == "Home" || currentActivity->name == "FileBrowser" ||
+                                   currentActivity->name == "Settings")) {
       int tx = 0;
       int ty = 0;
       // The header back button shares this band; its taps stay Back.
@@ -275,7 +273,9 @@ void ActivityManager::goToLibrary() {
 }
 
 void ActivityManager::goToRecentBooks(HomeMenuItem homeReturnItem, int homeReturnRecentIndex) {
-  replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput, homeReturnItem, homeReturnRecentIndex));
+  (void)homeReturnItem;
+  (void)homeReturnRecentIndex;
+  replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput));
 }
 
 void ActivityManager::goToBrowser() {

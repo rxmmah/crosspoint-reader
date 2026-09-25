@@ -18,7 +18,6 @@
 #include "components/icons/bookmark.h"
 #include "components/icons/cover.h"
 #include "components/icons/folder.h"
-#include "components/icons/hotspot.h"
 #include "components/icons/library.h"
 #include "components/icons/recent.h"
 #include "components/icons/settings2.h"
@@ -52,8 +51,6 @@ const uint8_t* iconForName(UIIcon icon) {
       return LibraryIcon;
     case UIIcon::Wifi:
       return WifiIcon;
-    case UIIcon::Hotspot:
-      return HotspotIcon;
     case UIIcon::Bookmark:
       return BookmarkIcon;
     case UIIcon::Blocks:
@@ -296,6 +293,10 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       titleY += renderer.getLineHeight(UI_10_FONT_ID) / 2;
       renderer.drawText(UI_10_FONT_ID, textX, titleY, author.c_str(), true);
     }
+    BaseTheme::drawBookProgress(
+        renderer,
+        Rect{tileX + hPaddingInSelection, tileY + hPaddingInSelection, coverWidth, LyraMetrics::values.homeCoverHeight},
+        book.progressPercent);
   } else {
     drawEmptyRecents(renderer, rect);
   }

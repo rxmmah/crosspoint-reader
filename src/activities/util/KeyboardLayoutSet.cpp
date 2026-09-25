@@ -13,10 +13,7 @@ uint8_t indexOf(const freeink::ui::KeyboardLayoutId id) {
   return COUNT;
 }
 
-freeink::ui::KeyboardLayoutId forLanguage(const Language language) {
-  for (uint8_t i = 0; i < COUNT; ++i) {
-    if (ALL[i].language == language) return ALL[i].id;
-  }
+freeink::ui::KeyboardLayoutId forLanguage(const Language) {
   return freeink::ui::KeyboardLayoutId::QwertyEn;
 }
 
