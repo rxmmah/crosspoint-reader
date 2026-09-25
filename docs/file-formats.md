@@ -90,6 +90,23 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 48
+
+Version 48 keeps the version 47 serialized layout unchanged. It was bumped
+because Hangul text no longer has implicit line-break opportunities between
+syllables: Korean words wrap at spaces (like CSS `word-break: keep-all`), and
+with hyphenation enabled a word may also split at the end of a line wherever the
+CJK line-breaking rules allow, without an inserted hyphen. Justification stretches only word spaces. Cached line breaks and word
+positions from version 47 no longer match.
+
+### Version 47
+
+The section header adds signed `characterSpacing` (pixels) and unsigned
+`wordSpacingPercent` after `focusReadingEnabled`; both participate in cache
+validation. Each TextBlock's BlockStyle stores only `characterSpacing` after
+`directionDefined`. Word spacing is resolved into cached word positions during
+layout. Sections from earlier versions are rebuilt.
+
 ### Version 46
 
 Version 46 keeps the version 45 serialized layout unchanged. It was bumped
@@ -183,7 +200,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 41
+#define EXPECTED_VERSION 48
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -240,6 +257,7 @@ struct BlockStyle {
     bool textIndentDefined;
     bool isRtl;
     bool directionDefined;
+    s8 characterSpacing;
 };
 
 struct TextBlock {
@@ -346,6 +364,8 @@ struct SectionBin {
     bool embeddedStyle;
     u8 imageRendering;
     bool focusReadingEnabled;
+    s8 characterSpacing;
+    u8 wordSpacingPercent;
 
     u16 pageCount;
     u32 pageLutOffset;
