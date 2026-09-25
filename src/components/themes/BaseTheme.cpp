@@ -135,6 +135,37 @@ void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const si
   renderer.drawCenteredText(UI_10_FONT_ID, rect.y + rect.height + 15, percentText.c_str());
 }
 
+void BaseTheme::drawBookProgress(const GfxRenderer& renderer, Rect coverRect, const int percent) {
+  if (percent < 0 || coverRect.width < 24 || coverRect.height < 24) return;
+  constexpr int stripHeight = 24;
+  const int stripY = coverRect.y + 4;
+  const int stripX = coverRect.x + 2;
+  const int stripW = coverRect.width - 4;
+
+  // Background strip (White)
+  renderer.fillRect(stripX, stripY, stripW, stripHeight, false);
+  renderer.drawRect(stripX, stripY, stripW, stripHeight);
+
+  // Percentage text (Centered)
+  char label[8];
+  snprintf(label, sizeof(label), "%d%%", percent);
+  // Use a slightly better Y offset for centering
+  renderer.drawCenteredText(UI_10_FONT_ID, stripY + 4, label);
+
+  // Progress bar
+  const int barPadding = 8;
+  const int barWidth = stripW - (barPadding * 2);
+  const int barX = stripX + barPadding;
+  const int barY = stripY + stripHeight - 8;
+  const int barH = 4;
+
+  renderer.drawRect(barX, barY, barWidth, barH);
+  const int fillWidth = (barWidth - 2) * percent / 100;
+  if (fillWidth > 0) {
+    renderer.fillRect(barX + 1, barY + 1, fillWidth, barH - 2);
+  }
+}
+
 // Centre a button-hint label inside its box. A label that fits is drawn on the
 // single baseline it always was; one too wide used to overflow the button border
 // and run into the neighbouring hint, and now wraps to at most two centred lines
@@ -662,6 +693,8 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     renderer.drawCenteredText(UI_12_FONT_ID, y, tr(STR_NO_OPEN_BOOK));
     renderer.drawCenteredText(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), tr(STR_START_READING));
   }
+  if (hasContinueReading)
+    drawBookProgress(renderer, Rect{bookX, bookY, bookWidth, bookHeight}, recentBooks[0].progressPercent);
 }
 
 int BaseTheme::getMenuRowHeight(const GfxRenderer&) const { return UITheme::getInstance().getMetrics().menuRowHeight; }

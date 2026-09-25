@@ -113,6 +113,13 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
         renderer.drawText(SMALL_FONT_ID, tileX + hPaddingInSelection, currentY, line.c_str(), true);
         currentY += titleLineHeight;
       }
+      if (i == 0) {
+        BaseTheme::drawBookProgress(
+            renderer,
+            Rect{tileX + hPaddingInSelection, tileY + hPaddingInSelection, tileWidth - 2 * hPaddingInSelection,
+                 Lyra3CoversMetrics::values.homeCoverHeight},
+            recentBooks[i].progressPercent);
+      }
     }
   } else {
     drawEmptyRecents(renderer, rect);

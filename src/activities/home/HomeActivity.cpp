@@ -7,6 +7,7 @@
 #include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Txt.h>
 #include <Utf8.h>
 #include <Xtc.h>
 
@@ -106,8 +107,68 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
     progress++;
   }
 
+  loadCurrentBookProgress();
+  requestUpdate();
   recentsLoaded = true;
   recentsLoading = false;
+}
+
+void HomeActivity::loadCurrentBookProgress() {
+  if (recentBooks.empty()) return;
+
+  RecentBook& book = recentBooks.front();
+  book.progressPercent = -1;
+  uint8_t data[10]{};
+  HalFile progressFile;
+
+  if (FsHelpers::hasEpubExtension(book.path)) {
+    Epub epub(book.path, "/.crosspoint");
+    if (!epub.load(false, true) ||
+        !Storage.openFileForRead("HOME", epub.getCachePath() + "/progress.bin", progressFile))
+      return;
+    const int size = progressFile.read(data, sizeof(data));
+    if (size != 6 && size != 10) return;
+    const int spine = data[0] | (data[1] << 8);
+    const int page = data[2] | (data[3] << 8);
+    const int pageCount = data[4] | (data[5] << 8);
+    if (pageCount <= 0 || spine >= epub.getSpineItemsCount()) return;
+    const float fraction = static_cast<float>(page) / pageCount;
+    book.progressPercent =
+        std::clamp(static_cast<int>(epub.calculateProgress(spine, fraction) * 100.0f + 0.5f), 0, 100);
+  } else if (FsHelpers::hasXtcExtension(book.path)) {
+    Xtc xtc(book.path, "/.crosspoint");
+    if (!xtc.load() || !Storage.openFileForRead("HOME", xtc.getCachePath() + "/progress.bin", progressFile)) return;
+    if (progressFile.read(data, 4) != 4) return;
+    const uint32_t page = data[0] | (static_cast<uint32_t>(data[1]) << 8) | (static_cast<uint32_t>(data[2]) << 16) |
+                          (static_cast<uint32_t>(data[3]) << 24);
+    const uint32_t pageCount = xtc.getPageCount();
+    if (pageCount > 0) book.progressPercent = xtc.calculateProgress(std::min(page, pageCount - 1));
+  } else if (FsHelpers::hasTxtExtension(book.path)) {
+    Txt txt(book.path, "/.crosspoint");
+    if (!txt.load() || !Storage.openFileForRead("HOME", txt.getCachePath() + "/progress.bin", progressFile)) return;
+    if (progressFile.read(data, 4) != 4) return;
+    const uint32_t page = data[0] | (static_cast<uint32_t>(data[1]) << 8);
+    HalFile indexFile;
+    if (!Storage.openFileForRead("HOME", txt.getCachePath() + "/index.bin", indexFile)) return;
+    uint8_t header[9];
+    if (indexFile.read(header, sizeof(header)) != sizeof(header)) return;
+    const uint32_t magic = header[0] | (static_cast<uint32_t>(header[1]) << 8) |
+                           (static_cast<uint32_t>(header[2]) << 16) | (static_cast<uint32_t>(header[3]) << 24);
+    if (magic != 0x54585449 || header[4] != 3) return;
+    uint8_t fileSizeBytes[4];
+    if (indexFile.read(fileSizeBytes, sizeof(fileSizeBytes)) != sizeof(fileSizeBytes)) return;
+    const uint32_t indexedFileSize = fileSizeBytes[0] | (static_cast<uint32_t>(fileSizeBytes[1]) << 8) |
+                                     (static_cast<uint32_t>(fileSizeBytes[2]) << 16) |
+                                     (static_cast<uint32_t>(fileSizeBytes[3]) << 24);
+    if (indexedFileSize != txt.getFileSize() || !indexFile.seek(26)) return;
+    uint8_t pageCountBytes[4];
+    if (indexFile.read(pageCountBytes, sizeof(pageCountBytes)) != sizeof(pageCountBytes)) return;
+    const uint32_t pageCount = pageCountBytes[0] | (static_cast<uint32_t>(pageCountBytes[1]) << 8) |
+                               (static_cast<uint32_t>(pageCountBytes[2]) << 16) |
+                               (static_cast<uint32_t>(pageCountBytes[3]) << 24);
+    if (pageCount > 0)
+      book.progressPercent = std::min<uint32_t>(100, (std::min(page, pageCount - 1) + 1) * 100 / pageCount);
+  }
 }
 
 void HomeActivity::onEnter() {
