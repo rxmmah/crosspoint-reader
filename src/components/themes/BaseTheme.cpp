@@ -182,7 +182,6 @@ void BaseTheme::drawBookProgress(const GfxRenderer& renderer, Rect coverRect, co
   int textWidth = renderer.getTextWidth(UI_10_FONT_ID, label);
   renderer.drawText(UI_10_FONT_ID, stripX + stripW - textWidth - 4, stripY + 4, label);
 }
-}
 
 // Centre a button-hint label inside its box. A label that fits is drawn on the
 // single baseline it always was; one too wide used to overflow the button border
