@@ -296,6 +296,10 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       titleY += renderer.getLineHeight(UI_10_FONT_ID) / 2;
       renderer.drawText(UI_10_FONT_ID, textX, titleY, author.c_str(), true);
     }
+    BaseTheme::drawBookProgress(
+        renderer,
+        Rect{tileX + hPaddingInSelection, tileY + hPaddingInSelection, coverWidth, LyraMetrics::values.homeCoverHeight},
+        book.progressPercent);
   } else {
     drawEmptyRecents(renderer, rect);
   }
