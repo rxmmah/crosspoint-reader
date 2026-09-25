@@ -137,33 +137,19 @@ void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const si
 
 void BaseTheme::drawBookProgress(const GfxRenderer& renderer, Rect coverRect, const int percent) {
   if (percent < 0 || coverRect.width < 24 || coverRect.height < 24) return;
-  constexpr int stripHeight = 24;
-  const int stripY = coverRect.y + 4;
-  const int stripX = coverRect.x + 2;
-  const int stripW = coverRect.width - 4;
+  constexpr int stripHeight = 22;
+  const int stripY = coverRect.y + coverRect.height - stripHeight;
+  const int stripX = coverRect.x;
+  const int stripW = coverRect.width;
 
-  // Background strip (White)
   renderer.fillRect(stripX, stripY, stripW, stripHeight, false);
   renderer.drawRect(stripX, stripY, stripW, stripHeight);
 
-  // Percentage text (Centered)
   char label[8];
   snprintf(label, sizeof(label), "%d%%", percent);
-  // Use a slightly better Y offset for centering
-  renderer.drawCenteredText(UI_10_FONT_ID, stripY + 4, label);
-
-  // Progress bar
-  const int barPadding = 8;
-  const int barWidth = stripW - (barPadding * 2);
-  const int barX = stripX + barPadding;
-  const int barY = stripY + stripHeight - 8;
-  const int barH = 4;
-
-  renderer.drawRect(barX, barY, barWidth, barH);
-  const int fillWidth = (barWidth - 2) * percent / 100;
-  if (fillWidth > 0) {
-    renderer.fillRect(barX + 1, barY + 1, fillWidth, barH - 2);
-  }
+  int textWidth = renderer.getTextWidth(UI_10_FONT_ID, label);
+  renderer.drawText(UI_10_FONT_ID, stripX + stripW - textWidth - 4, stripY + 4, label);
+}
 }
 
 // Centre a button-hint label inside its box. A label that fits is drawn on the
