@@ -166,6 +166,8 @@ class EpubReaderActivity final : public ReaderActivity {
   void openWordSelect(DictionaryWordSelectActivity::Mode mode);
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
   // because no KOReader credentials are stored.
+  void openFootnoteSelect(bool reopenMenuOnCancel);
+  void openDictionaryWordSelect();
   bool launchKOReaderSync();
   unsigned long confirmLongPressThreshold() const;
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
